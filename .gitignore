@@ -2,6 +2,8 @@
 /bam
 /build
 /build-switch
+/build-windows
+/thirdParty
 /config.lua
 /objs
 /other/*/include
