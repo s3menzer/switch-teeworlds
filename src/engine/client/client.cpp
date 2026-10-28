@@ -16,6 +16,16 @@
 #include <base/math.h>
 #include <base/system.h>
 
+#if defined(CONF_FAMILY_WINDOWS)
+	#ifndef WIN32_LEAN_AND_MEAN
+		#define WIN32_LEAN_AND_MEAN
+	#endif
+	#ifndef NOMINMAX
+		#define NOMINMAX
+	#endif
+	#include <windows.h>
+#endif
+
 #include <engine/client.h>
 #include <engine/config.h>
 #include <engine/console.h>
@@ -2727,6 +2737,9 @@ extern "C" int SDL_main(int argc, char **argv_) // ignore_convention
 #else
 int main(int argc, const char **argv) // ignore_convention
 {
+#if defined(CONF_FAMILY_WINDOWS)
+	SDL_SetMainReady();
+#endif
 	#if defined(__SWITCH__)
 		Switch::fsdevMountSdmc();
 		const bool DebugLogging = SwitchDebugLoggingEnabled();

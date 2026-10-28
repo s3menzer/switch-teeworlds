@@ -308,6 +308,57 @@ if(NOT CMAKE_CROSSCOMPILING)
   find_package(PkgConfig)
 endif()
 find_package(ZLIB)
+if(TARGET_OS STREQUAL "windows")
+  # Build the supplied zlib sources directly instead of using the old
+  # zlib1.dll import library, which would require zlib1.dll at runtime.
+  set(TEEWORLDS_ZLIB_ARCHIVE "${PROJECT_SOURCE_DIR}/thirdParty/zlib.tar.gz")
+  set(TEEWORLDS_ZLIB_EXTRACT_DIR "${PROJECT_BINARY_DIR}/_deps/zlib")
+  set(TEEWORLDS_ZLIB_SOURCE_DIR "${TEEWORLDS_ZLIB_EXTRACT_DIR}/zlib-1.3.2")
+
+  if(NOT EXISTS "${TEEWORLDS_ZLIB_SOURCE_DIR}/CMakeLists.txt")
+    if(NOT EXISTS "${TEEWORLDS_ZLIB_ARCHIVE}")
+      message(FATAL_ERROR "zlib sources not found: ${TEEWORLDS_ZLIB_ARCHIVE}")
+    endif()
+    file(MAKE_DIRECTORY "${TEEWORLDS_ZLIB_EXTRACT_DIR}")
+    execute_process(
+      COMMAND "${CMAKE_COMMAND}" -E tar xzf "${TEEWORLDS_ZLIB_ARCHIVE}"
+      WORKING_DIRECTORY "${TEEWORLDS_ZLIB_EXTRACT_DIR}"
+      RESULT_VARIABLE TEEWORLDS_ZLIB_EXTRACT_RESULT
+    )
+    if(NOT "${TEEWORLDS_ZLIB_EXTRACT_RESULT}" STREQUAL "0")
+      message(FATAL_ERROR "Failed to extract ${TEEWORLDS_ZLIB_ARCHIVE}: ${TEEWORLDS_ZLIB_EXTRACT_RESULT}")
+    endif()
+  endif()
+
+  if(NOT EXISTS "${TEEWORLDS_ZLIB_SOURCE_DIR}/CMakeLists.txt")
+    message(FATAL_ERROR "Expected zlib-1.3.2 sources in ${TEEWORLDS_ZLIB_SOURCE_DIR}")
+  endif()
+
+  add_library(teeworlds-zlib STATIC
+    "${TEEWORLDS_ZLIB_SOURCE_DIR}/adler32.c"
+    "${TEEWORLDS_ZLIB_SOURCE_DIR}/compress.c"
+    "${TEEWORLDS_ZLIB_SOURCE_DIR}/crc32.c"
+    "${TEEWORLDS_ZLIB_SOURCE_DIR}/deflate.c"
+    "${TEEWORLDS_ZLIB_SOURCE_DIR}/gzclose.c"
+    "${TEEWORLDS_ZLIB_SOURCE_DIR}/gzlib.c"
+    "${TEEWORLDS_ZLIB_SOURCE_DIR}/gzread.c"
+    "${TEEWORLDS_ZLIB_SOURCE_DIR}/gzwrite.c"
+    "${TEEWORLDS_ZLIB_SOURCE_DIR}/inflate.c"
+    "${TEEWORLDS_ZLIB_SOURCE_DIR}/infback.c"
+    "${TEEWORLDS_ZLIB_SOURCE_DIR}/inftrees.c"
+    "${TEEWORLDS_ZLIB_SOURCE_DIR}/inffast.c"
+    "${TEEWORLDS_ZLIB_SOURCE_DIR}/trees.c"
+    "${TEEWORLDS_ZLIB_SOURCE_DIR}/uncompr.c"
+    "${TEEWORLDS_ZLIB_SOURCE_DIR}/zutil.c"
+  )
+  target_include_directories(teeworlds-zlib PUBLIC "${TEEWORLDS_ZLIB_SOURCE_DIR}")
+  list(APPEND TARGETS_DEP teeworlds-zlib)
+  set(ZLIB_FOUND ON)
+  set(ZLIB_BUNDLED ON)
+  set(ZLIB_INCLUDE_DIRS "${TEEWORLDS_ZLIB_SOURCE_DIR}")
+  set(ZLIB_LIBRARIES teeworlds-zlib)
+  set(ZLIB_DEP)
+endif()
 find_package(Crypto)
 find_package(OwnFreetype)
 find_package(Git)
@@ -1554,6 +1605,9 @@ if(CLIENT)
     $<TARGET_OBJECTS:engine-shared>
     $<TARGET_OBJECTS:game-shared>
   )
+  if(TARGET_OS STREQUAL "windows")
+    target_compile_definitions(${TARGET_CLIENT} PRIVATE SDL_MAIN_HANDLED)
+  endif()
   target_link_libraries(${TARGET_CLIENT} ${LIBS_CLIENT})
 
   target_include_directories(${TARGET_CLIENT} PRIVATE

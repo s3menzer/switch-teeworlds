@@ -1,18 +1,18 @@
 @echo off
 setlocal
 
-rem Use Ninja + clang-cl in the MSVC environment; bundled zlib is x86.
+rem Use Ninja + clang-cl in the MSVC environment for a 32-bit Windows build.
 for %%I in ("%~dp0.") do set "ROOT=%%~fI"
 set "BUILD_ROOT=%ROOT%\build-windows"
-set "BUILD_DIR=%BUILD_ROOT%\ninja-clang-win32"
+set "BUILD_DIR=%BUILD_ROOT%\ninja-clang-x86"
 set "PYTHON=%ROOT%\.venv\Scripts\python.exe"
-set "ZLIB_DIR=%ROOT%\thirdParty\zlib-1.2.3-lib"
-set "ZLIB_LIB=%ZLIB_DIR%\lib\zlib.lib"
+set "ZLIB_ARCHIVE=%ROOT%\thirdParty\zlib.tar.gz"
 set "SDL_DIR=%ROOT%\thirdParty\SDL-install"
 set "SDL_LIB=%SDL_DIR%\lib\SDL2.lib"
 set "SDL_INCLUDE=%SDL_DIR%\include\SDL2"
+set "CLANG_TOOLCHAIN=%ROOT%\cmake\toolchains\clang-cl-x86.toolchain"
 set "VSDEVCMD=%ProgramFiles(x86)%\Microsoft Visual Studio\2022\BuildTools\Common7\Tools\VsDevCmd.bat"
-set "CLANG_CL=%ProgramFiles(x86)%\Microsoft Visual Studio\2022\BuildTools\VC\Tools\Llvm\bin\clang-cl.exe"
+set "TEEWORLDS_CLANG_CL=%ProgramFiles(x86)%\Microsoft Visual Studio\2022\BuildTools\VC\Tools\Llvm\x64\bin\clang-cl.exe"
 set "NINJA=%ProgramFiles(x86)%\Microsoft Visual Studio\2022\BuildTools\Common7\IDE\CommonExtensions\Microsoft\CMake\Ninja\ninja.exe"
 
 if not exist "%BUILD_ROOT%\" (
@@ -25,12 +25,8 @@ if not exist "%PYTHON%" (
     echo ERROR: Python virtual environment not found: "%PYTHON%"
     goto :input_error
 )
-if not exist "%ZLIB_DIR%\include\zlib.h" (
-    echo ERROR: zlib headers not found under "%ZLIB_DIR%\include"
-    goto :input_error
-)
-if not exist "%ZLIB_LIB%" (
-    echo ERROR: zlib import library not found: "%ZLIB_LIB%"
+if not exist "%ZLIB_ARCHIVE%" (
+    echo ERROR: zlib source archive not found: "%ZLIB_ARCHIVE%"
     goto :input_error
 )
 if not exist "%SDL_DIR%\include\SDL2\SDL.h" (
@@ -45,44 +41,61 @@ if not exist "%VSDEVCMD%" (
     echo ERROR: Visual Studio developer environment script not found: "%VSDEVCMD%"
     goto :input_error
 )
-if not exist "%CLANG_CL%" (
-    echo ERROR: clang-cl not found: "%CLANG_CL%"
+if not exist "%TEEWORLDS_CLANG_CL%" (
+    echo ERROR: clang-cl not found: "%TEEWORLDS_CLANG_CL%"
     goto :input_error
 )
 if not exist "%NINJA%" (
     echo ERROR: Ninja not found: "%NINJA%"
     goto :input_error
 )
+if not exist "%CLANG_TOOLCHAIN%" (
+    echo ERROR: clang-cl x86 toolchain file not found: "%CLANG_TOOLCHAIN%"
+    goto :input_error
+)
 
 call "%VSDEVCMD%" -arch=x86 -host_arch=x64 >nul
 if errorlevel 1 goto :vs_error
+if not defined VCToolsInstallDir goto :vs_error
+if not defined WindowsSdkDir goto :vs_error
+if not defined WindowsSDKVersion goto :vs_error
+set "LIB=%VCToolsInstallDir%lib\x86;%WindowsSdkDir%Lib\%WindowsSDKVersion%ucrt\x86;%WindowsSdkDir%Lib\%WindowsSDKVersion%um\x86;%LIB%"
+if not exist "%WindowsSdkDir%Lib\%WindowsSDKVersion%um\x86\WS2_32.Lib" goto :vs_error
+set "DUMPBIN=%VCToolsInstallDir%bin\Hostx64\x86\dumpbin.exe"
+if not exist "%DUMPBIN%" goto :vs_error
 for /f "delims=" %%L in ('where link.exe') do if not defined MSVC_LINK set "MSVC_LINK=%%L"
 if not exist "%MSVC_LINK%" goto :vs_error
 
-cmake -S .. -B ninja-clang-win32 -G Ninja ^
+cmake -S .. -B "%BUILD_DIR%" -G Ninja ^
     "-DCMAKE_MAKE_PROGRAM:FILEPATH=%NINJA%" ^
-    "-DCMAKE_C_COMPILER:FILEPATH=%CLANG_CL%" ^
-    "-DCMAKE_CXX_COMPILER:FILEPATH=%CLANG_CL%" ^
+    "-DCMAKE_TOOLCHAIN_FILE:FILEPATH=%CLANG_TOOLCHAIN%" ^
+    "-DCMAKE_C_COMPILER:FILEPATH=%TEEWORLDS_CLANG_CL%" ^
+    "-DCMAKE_CXX_COMPILER:FILEPATH=%TEEWORLDS_CLANG_CL%" ^
     "-DCMAKE_LINKER:FILEPATH=%MSVC_LINK%" ^
     "-DCMAKE_BUILD_TYPE:STRING=Release" ^
     "-DPYTHON_EXECUTABLE:FILEPATH=%PYTHON%" ^
     "-DCLIENT_EXECUTABLE:STRING=teeworlds" ^
     "-DDOWNLOAD_DEPENDENCIES:BOOL=ON" ^
     "-DDOWNLOAD_GTEST:BOOL=OFF" ^
-    "-DZLIB_INCLUDE_DIR:PATH=%ZLIB_DIR%\include" ^
-    "-DZLIB_LIBRARY_RELEASE:FILEPATH=%ZLIB_LIB%" ^
-    "-DZLIB_LIBRARY_DEBUG:FILEPATH=%ZLIB_LIB%" ^
     "-DSDL2_LIBRARY:FILEPATH=%SDL_LIB%" ^
     "-DSDL2_INCLUDEDIR:PATH=%SDL_INCLUDE%"
 if errorlevel 1 goto :cmake_error
 
-cmake --build ninja-clang-win32 --parallel
+cmake --build "%BUILD_DIR%" --parallel
 if errorlevel 1 goto :build_error
+
+"%DUMPBIN%" /nologo /dependents "%BUILD_DIR%\teeworlds.exe" | findstr /I /C:"zlib1.dll" >nul
+if not errorlevel 1 (
+    echo ERROR: teeworlds.exe still depends on zlib1.dll.
+    echo The Windows build compiles zlib from thirdParty\zlib.tar.gz as a static library.
+    popd
+    exit /b 1
+)
 
 echo.
 echo Ninja + clang-cl build succeeded:
 echo   "%BUILD_DIR%"
-echo Copy SDL2.dll and zlib1.dll beside the game executable before running it.
+echo SDL2.dll and freetype.dll must remain beside the game executable.
 popd
 exit /b 0
 
