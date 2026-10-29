@@ -121,17 +121,11 @@ macro(acquire_app_json target)
 endmacro()
 
 function(add_nso_target target)
-    add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/${target}.nso
+    add_custom_target(${target}.nso ALL
             COMMAND ${ELF2NSO} ${CMAKE_CURRENT_BINARY_DIR}/${target}.elf ${CMAKE_CURRENT_BINARY_DIR}/${target}.nso
             DEPENDS ${target}.elf
             WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
             VERBATIM)
-
-    if (CMAKE_RUNTIME_OUTPUT_DIRECTORY)
-        add_custom_target(${target}.nso ALL SOURCES ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${target}.nso)
-    else ()
-        add_custom_target(${target}.nso ALL SOURCES ${CMAKE_CURRENT_BINARY_DIR}/${target}.nso)
-    endif ()
 endfunction()
 
 function(add_nacp target)
@@ -209,16 +203,10 @@ function(add_nro_target target)
         add_nacp(${target}.nacp)
     endif ()
 
-    add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/${target}.nro
+    add_custom_target(${target}.nro ALL
             COMMAND ${__NRO_COMMAND}
             DEPENDS ${target}.elf ${CMAKE_CURRENT_BINARY_DIR}/${target}.nacp
             VERBATIM)
-
-    if (CMAKE_RUNTIME_OUTPUT_DIRECTORY)
-        add_custom_target(${target}.nro ALL SOURCES ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${target}.nro)
-    else ()
-        add_custom_target(${target}.nro ALL SOURCES ${CMAKE_CURRENT_BINARY_DIR}/${target}.nro)
-    endif ()
 endfunction()
 
 function(build_switch_binaries target)

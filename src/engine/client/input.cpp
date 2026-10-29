@@ -2,6 +2,10 @@
 /* If you are missing that file, acquire a complete release at teeworlds.com.                */
 #include "SDL.h"
 
+#if defined(__SWITCH__)
+	#include <switch.h>
+#endif
+
 #include <base/system.h>
 #include <engine/shared/config.h>
 #include <engine/console.h>
@@ -50,6 +54,10 @@ CInput::CInput()
 	m_aSelectedJoystickGUID[0] = '\0';
 
 	m_PreviousHat = 0;
+	#if defined(__SWITCH__)
+		m_SwitchMouseX = 0;
+		m_SwitchMouseY = 0;
+	#endif
 
 	m_MouseDoubleClick = false;
 
@@ -203,6 +211,12 @@ void CInput::MouseRelative(float *x, float *y)
 	float JoystickSens = g_Config.m_JoystickSens/100.0f;
 
 	SDL_GetRelativeMouseState(&nx,&ny);
+	#if defined(__SWITCH__)
+		nx += m_SwitchMouseX;
+		ny += m_SwitchMouseY;
+		m_SwitchMouseX = 0;
+		m_SwitchMouseY = 0;
+	#endif
 
 	vec2 j = vec2(0.0f, 0.0f);
 
@@ -295,6 +309,65 @@ int CInput::Update()
 {
 	// keep the counter between 1..0xFFFF, 0 means not pressed
 	m_InputCounter = (m_InputCounter%0xFFFF)+1;
+	#if defined(__SWITCH__)
+		// Teeworlds menus use a mouse cursor. Bridge the Switch pad to SDL mouse
+		// events so the menu can be operated with Joy-Con or a Pro Controller.
+		static PadState s_Pad;
+		static bool s_PadInitialized = false;
+		static u64 s_PreviousKeys = 0;
+		if(!s_PadInitialized)
+		{
+			padConfigureInput(1, HidNpadStyleSet_NpadFullCtrl);
+			padInitializeDefault(&s_Pad);
+			s_PadInitialized = true;
+		}
+		padUpdate(&s_Pad);
+		const u64 Keys = padGetButtons(&s_Pad);
+
+		auto PushMouseButton = [](Uint32 Type) {
+			SDL_Event Event;
+			mem_zero(&Event, sizeof(Event));
+			Event.type = Type;
+			Event.button.button = SDL_BUTTON_LEFT;
+			Event.button.state = Type == SDL_MOUSEBUTTONDOWN ? SDL_PRESSED : SDL_RELEASED;
+			SDL_PushEvent(&Event);
+		};
+		if((Keys & KEY_A) && !(s_PreviousKeys & KEY_A))
+			PushMouseButton(SDL_MOUSEBUTTONDOWN);
+		if(!(Keys & KEY_A) && (s_PreviousKeys & KEY_A))
+			PushMouseButton(SDL_MOUSEBUTTONUP);
+
+		auto PushKey = [](Uint32 Type, SDL_Keycode Keycode) {
+			SDL_Event Event;
+			mem_zero(&Event, sizeof(Event));
+			Event.type = Type;
+			Event.key.state = Type == SDL_KEYDOWN ? SDL_PRESSED : SDL_RELEASED;
+			Event.key.repeat = 0;
+			Event.key.keysym.sym = Keycode;
+			Event.key.keysym.scancode = SDL_GetScancodeFromKey(Keycode);
+			SDL_PushEvent(&Event);
+		};
+		const u64 CancelKeys = HidNpadButton_B | HidNpadButton_Plus;
+		if((Keys & CancelKeys) && !(s_PreviousKeys & CancelKeys))
+			PushKey(SDL_KEYDOWN, SDLK_ESCAPE);
+		if(!(Keys & CancelKeys) && (s_PreviousKeys & CancelKeys))
+			PushKey(SDL_KEYUP, SDLK_ESCAPE);
+
+		HidAnalogStickState Stick = padGetStickPos(&s_Pad, 0);
+		const int Deadzone = 8000;
+		int MouseX = abs(Stick.x) > Deadzone ? Stick.x * 16 / 32767 : 0;
+		int MouseY = abs(Stick.y) > Deadzone ? -Stick.y * 16 / 32767 : 0;
+		if(Keys & HidNpadButton_Left) MouseX -= 12;
+		if(Keys & HidNpadButton_Right) MouseX += 12;
+		if(Keys & HidNpadButton_Up) MouseY -= 12;
+		if(Keys & HidNpadButton_Down) MouseY += 12;
+		if(MouseX || MouseY)
+		{
+			m_SwitchMouseX += MouseX;
+			m_SwitchMouseY += MouseY;
+		}
+		s_PreviousKeys = Keys;
+	#endif
 
 	{
 		int i;
@@ -456,6 +529,8 @@ int CInput::Update()
 					m_aInputState[Scancode] = 1;
 					m_aInputCount[Key] = m_InputCounter;
 				}
+				else if(Action&IInput::FLAG_RELEASE)
+					m_aInputState[Scancode] = 0;
 				AddEvent(0, Key, Action);
 			}
 

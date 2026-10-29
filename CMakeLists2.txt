@@ -1510,13 +1510,23 @@ if(CLIENT)
     src/generated/client_data.h
   )
   set(CLIENT_SRC ${PLATFORM_CLIENT} ${ENGINE_CLIENT} ${GAME_CLIENT} ${GAME_EDITOR} ${GAME_GENERATED_CLIENT})
+  if(SWITCH)
+    list(APPEND CLIENT_SRC
+      src/updater/updater.cpp
+      src/updater/updater.hpp
+    )
+  endif()
 
   set(DEPS_CLIENT ${DEPS} ${PNGLITE_DEP} ${WAVPACK_DEP})
 
   # Libraries
+  if(SWITCH)
+    find_library(HARFBUZZ_LIBRARY harfbuzz PATHS ${PORTLIBS}/lib NO_DEFAULT_PATH)
+  endif()
   set(LIBS_CLIENT
     ${LIBS}
     ${FREETYPE_LIBRARIES}
+    ${HARFBUZZ_LIBRARY}
     ${PNGLITE_LIBRARIES}
     ${SDL2_LIBRARIES}
     ${WAVPACK_LIBRARIES}

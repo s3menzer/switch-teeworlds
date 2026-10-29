@@ -230,6 +230,12 @@ int CSound::Init()
 	Format.format = AUDIO_S16; // ignore_convention
 	Format.channels = 2; // ignore_convention
 	Format.samples = g_Config.m_SndBufferSize; // ignore_convention
+#if defined(__SWITCH__)
+	// Keep enough audio data queued to avoid underruns while the Switch
+	// is rendering or loading assets.
+	if(Format.samples < 2048)
+		Format.samples = 2048;
+#endif
 	Format.callback = SdlCallback; // ignore_convention
 	Format.userdata = NULL; // ignore_convention
 
@@ -242,7 +248,7 @@ int CSound::Init()
 	else
 		dbg_msg("client/sound", "sound init successful");
 
-	m_MaxFrames = g_Config.m_SndBufferSize*2;
+	m_MaxFrames = Format.samples*2;
 	m_pMixBuffer = (int *)mem_alloc(m_MaxFrames*2*sizeof(int), 1);
 
 	SDL_PauseAudio(0);

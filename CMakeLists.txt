@@ -52,7 +52,7 @@ set(HOMEBREW_APP "teeworlds")
 # Meta information about the app
 set(APP_TITLE ${HOMEBREW_APP})
 set(APP_AUTHOR "Flyingsky")
-set(APP_ICON "../assets/teeworlds.jpg")
+set(APP_ICON "${CMAKE_CURRENT_SOURCE_DIR}/assets/teeworld.png")
 
 
 if (NOT DEFINED CMAKE_BUILD_TYPE_INIT)
@@ -84,6 +84,9 @@ target_link_libraries(${HOMEBREW_APP}.elf switch::bz2)
 
 find_package(PNG)
 target_link_libraries(${HOMEBREW_APP}.elf switch::png)
+
+find_package(HarfBuzz REQUIRED)
+target_link_libraries(${HOMEBREW_APP}.elf switch::harfbuzz)
 
 find_package(EGL)
 target_link_libraries(${HOMEBREW_APP}.elf switch::egl)

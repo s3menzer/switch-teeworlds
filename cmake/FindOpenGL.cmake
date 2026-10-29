@@ -1,5 +1,7 @@
 if (NOT SWITCH)
-    include(/usr/share/cmake-3.16/Modules/FindOpenGL.cmake)
+    # Use the FindOpenGL module shipped with the active CMake installation.
+    # The previous hard-coded CMake 3.16 path breaks on newer distributions.
+    include("${CMAKE_ROOT}/Modules/FindOpenGL.cmake")
 else()
 set(OPENGL_PATHS $ENV{OPENGL} GL ${OPENGL} ${PORTLIBS})
 
