@@ -50,6 +50,12 @@ exec "$ENGINE" run --rm "${TTY_ARGS[@]}" \
 	"$IMAGE" \
 	bash -lc \
 	'export PATH="$DEVKITA64/bin:$DEVKITPRO/tools/bin:$DEVKITPRO/pacman/bin:$DEVKITPRO/portlibs/switch/bin:$PATH";
+	if [[ "${INSTALL_SWITCH_HARFBUZZ:-1}" == "1" ]] &&
+		{ [[ ! -f "$PORTLIBS/lib/libharfbuzz.a" ]] ||
+		  [[ ! -f "$PORTLIBS/include/harfbuzz/hb.h" ]]; }; then
+		echo "Installing switch-harfbuzz in the container...";
+		dkp-pacman -S --needed --noconfirm switch-harfbuzz;
+	fi;
 	./build.sh "$@"' \
 	docker-build \
 	"$@"

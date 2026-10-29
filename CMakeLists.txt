@@ -85,6 +85,9 @@ target_link_libraries(${HOMEBREW_APP}.elf switch::bz2)
 find_package(PNG)
 target_link_libraries(${HOMEBREW_APP}.elf switch::png)
 
+find_package(HarfBuzz REQUIRED)
+target_link_libraries(${HOMEBREW_APP}.elf switch::harfbuzz)
+
 find_package(EGL)
 target_link_libraries(${HOMEBREW_APP}.elf switch::egl)
 
