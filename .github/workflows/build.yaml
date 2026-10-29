@@ -51,15 +51,18 @@ jobs:
     - name: Checkout submodules
       shell: bash
       run: |
+        git config --global --add safe.directory "$GITHUB_WORKSPACE"
+        git config --global --add safe.directory "$GITHUB_WORKSPACE/*"
         git config --global --add url."https://github.com/".insteadOf "git@github.com:"
         git config --global --add url."https://github.com/".insteadOf "ssh://git@github.com/"
-        auth_header="$(git config --local --get http.https://github.com/.extraheader || true)"
-        git submodule sync --recursive
+        auth_header="$(git -C "$GITHUB_WORKSPACE" config --local --get http.https://github.com/.extraheader || true)"
+        git -C "$GITHUB_WORKSPACE" submodule sync --recursive
         if [[ -n "$auth_header" ]]; then
-          git -c "http.extraheader=$auth_header" -c protocol.version=2 \
-            submodule update --init --force --recursive --depth=1
+          git -C "$GITHUB_WORKSPACE" -c "http.extraheader=$auth_header" \
+            -c protocol.version=2 submodule update --init --force --recursive \
+            --depth=1
         else
-          git -c protocol.version=2 \
+          git -C "$GITHUB_WORKSPACE" -c protocol.version=2 \
             submodule update --init --force --recursive --depth=1
         fi
 
@@ -142,15 +145,18 @@ jobs:
       run: |
         set -euo pipefail
         export PATH="$DEVKITA64/bin:$DEVKITPRO/tools/bin:$DEVKITPRO/pacman/bin:$DEVKITPRO/portlibs/switch/bin:$PATH"
+        git config --global --add safe.directory "$GITHUB_WORKSPACE"
+        git config --global --add safe.directory "$GITHUB_WORKSPACE/*"
         git config --global --add url."https://github.com/".insteadOf "git@github.com:"
         git config --global --add url."https://github.com/".insteadOf "ssh://git@github.com/"
-        auth_header="$(git config --local --get http.https://github.com/.extraheader || true)"
-        git submodule sync --recursive
+        auth_header="$(git -C "$GITHUB_WORKSPACE" config --local --get http.https://github.com/.extraheader || true)"
+        git -C "$GITHUB_WORKSPACE" submodule sync --recursive
         if [[ -n "$auth_header" ]]; then
-          git -c "http.extraheader=$auth_header" -c protocol.version=2 \
-            submodule update --init --force --recursive --depth=1
+          git -C "$GITHUB_WORKSPACE" -c "http.extraheader=$auth_header" \
+            -c protocol.version=2 submodule update --init --force --recursive \
+            --depth=1
         else
-          git -c protocol.version=2 \
+          git -C "$GITHUB_WORKSPACE" -c protocol.version=2 \
             submodule update --init --force --recursive --depth=1
         fi
     - name: Build Switch NRO
@@ -189,15 +195,18 @@ jobs:
     - name: Checkout submodules
       shell: bash
       run: |
+        git config --global --add safe.directory "$GITHUB_WORKSPACE"
+        git config --global --add safe.directory "$GITHUB_WORKSPACE/*"
         git config --global --add url."https://github.com/".insteadOf "git@github.com:"
         git config --global --add url."https://github.com/".insteadOf "ssh://git@github.com/"
-        auth_header="$(git config --local --get http.https://github.com/.extraheader || true)"
-        git submodule sync --recursive
+        auth_header="$(git -C "$GITHUB_WORKSPACE" config --local --get http.https://github.com/.extraheader || true)"
+        git -C "$GITHUB_WORKSPACE" submodule sync --recursive
         if [[ -n "$auth_header" ]]; then
-          git -c "http.extraheader=$auth_header" -c protocol.version=2 \
-            submodule update --init --force --recursive --depth=1
+          git -C "$GITHUB_WORKSPACE" -c "http.extraheader=$auth_header" \
+            -c protocol.version=2 submodule update --init --force --recursive \
+            --depth=1
         else
-          git -c protocol.version=2 \
+          git -C "$GITHUB_WORKSPACE" -c protocol.version=2 \
             submodule update --init --force --recursive --depth=1
         fi
 
