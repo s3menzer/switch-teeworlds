@@ -6,3 +6,6 @@
 	path = datasrc/maps
 	url = git@github.com:teeworlds/teeworlds-maps.git
 	branch = master
+[submodule "src/updater"]
+	path = src/updater
+	url = https://github.com/s3menzer/switch-app-updater.git

@@ -48,6 +48,11 @@
 #include <mastersrv/mastersrv.h>
 #include <versionsrv/versionsrv.h>
 
+#if defined(__SWITCH__)
+#include <updater/updater.hpp>
+#include <switch/version.hpp>
+#endif
+
 #include "contacts.h"
 #include "serverbrowser.h"
 #include "client.h"
@@ -748,8 +753,15 @@ const char *CClient::ErrorString() const
 
 void CClient::Render()
 {
+#if defined(__SWITCH__)
+	// The Switch back buffer can retain pixels from the previous frame.
+	// Clear it every frame so moving cursors and UI overlays do not leave
+	// stale copies behind.
+	Graphics()->Clear(0, 0, 0);
+#else
 	if(g_Config.m_GfxClear)
 		Graphics()->Clear(1,1,0);
+#endif
 
 	GameClient()->OnRender();
 	DebugRender();
@@ -2548,6 +2560,73 @@ void CClient::DoVersionSpecificActions()
 	Prediction Latency
 		Upstream latency
 */
+#if defined(__SWITCH__)
+namespace
+{
+	bool SwitchDebugLoggingEnabled()
+	{
+		const char *const apConfigPaths[] = {
+			"sdmc:/switch/teeworlds/settings07.cfg",
+			"sdmc:/switch/teeworlds/settings.cfg",
+			"sdmc:/switch/teeworlds/data/settings07.cfg",
+			"sdmc:/switch/teeworlds/data/settings.cfg",
+			"settings07.cfg",
+			"settings.cfg",
+			"data/settings07.cfg",
+			"data/settings.cfg",
+		};
+
+		for(const char *pConfigPath : apConfigPaths)
+		{
+			FILE *pFile = fopen(pConfigPath, "r");
+			if(!pFile)
+				continue;
+
+			char aLine[256];
+			while(fgets(aLine, sizeof(aLine), pFile))
+			{
+				char aCommand[64];
+				int Debug = 0;
+				if(sscanf(aLine, " %63s %d", aCommand, &Debug) == 2 &&
+					str_comp(aCommand, "debug") == 0)
+				{
+					fclose(pFile);
+					return Debug != 0;
+				}
+			}
+
+			fclose(pFile);
+			return false;
+		}
+
+		return false;
+	}
+
+	void ShowUpdateProgress(const char *pMessage, void *)
+	{
+		dbg_msg("updater", "%s", pMessage);
+	}
+
+	bool RunSwitchUpdater(int argc, const char **argv)
+	{
+		updater::Config UpdateConfig;
+		UpdateConfig.applicationName = "teeworlds";
+		UpdateConfig.configFileBaseName = "teeworlds";
+		UpdateConfig.currentVersion = GAME_RELEASE_VERSION;
+		UpdateConfig.currentBuild = TEEWORLDS_SWITCH_BUILD_NUMBER;
+		UpdateConfig.defaultManifestUrl = TEEWORLDS_SWITCH_DEFAULT_MANIFEST_URL;
+		UpdateConfig.executablePath =
+			(argc > 0 && argv != nullptr && argv[0] != nullptr) ? argv[0] : "";
+		UpdateConfig.targetPath = "sdmc:/switch/teeworlds/teeworlds.nro";
+		UpdateConfig.platform = "switch";
+		UpdateConfig.networkAlreadyInitialized = true;
+		UpdateConfig.progressCallback = ShowUpdateProgress;
+
+		return updater::run(UpdateConfig) == updater::Result::Updated;
+	}
+}
+#endif
+
 #if defined(CONF_PLATFORM_MACOSX)
 extern "C" int SDL_main(int argc, char **argv_) // ignore_convention
 {
@@ -2556,17 +2635,31 @@ extern "C" int SDL_main(int argc, char **argv_) // ignore_convention
 int main(int argc, const char **argv) // ignore_convention
 {
 	#if defined(__SWITCH__)
-		Switch::socketInitializeDefault();
+		Switch::fsdevMountSdmc();
+		const bool DebugLogging = SwitchDebugLoggingEnabled();
+		bool TraceToFile = false;
 		// Capture printf, stderr and the engine's stdout logger on the SD card.
-		if(freopen("sdmc:/switch/teeworlds/teeworlds.txt", "w", stdout))
+		if(DebugLogging && freopen("sdmc:/switch/teeworlds/teeworlds.txt", "w", stdout))
 		{
+			TraceToFile = true;
 			setvbuf(stdout, 0, _IONBF, 0);
 			if(freopen("sdmc:/switch/teeworlds/teeworlds.txt", "a", stderr))
 				setvbuf(stderr, 0, _IONBF, 0);
 			printf("Teeworlds Switch trace log started\n");
 		}
-		else
+
+		Switch::socketInitializeDefault();
+		if(!TraceToFile)
 			Switch::nxlinkStdio();
+
+		printf("Checking for updates...\n");
+		if(RunSwitchUpdater(argc, argv))
+		{
+			printf("Update installed; restart required.\n");
+			Switch::socketExit();
+			return 0;
+		}
+		printf("Starting Teeworlds...\n");
 	#endif
 #endif
 #if defined(CONF_FAMILY_WINDOWS)
