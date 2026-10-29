@@ -107,8 +107,49 @@ try {
     } else {
       $env:TEEWORLDS_DOWNLOAD_URL
     }
+    $DataUrlBase = if ([string]::IsNullOrEmpty($env:TEEWORLDS_DATA_URL_BASE)) {
+      $DownloadUrl.Substring(0, $DownloadUrl.LastIndexOf('/'))
+    } else {
+      $env:TEEWORLDS_DATA_URL_BASE.TrimEnd('/')
+    }
 
     $Sha256 = (Get-FileHash -Algorithm SHA256 $NroPath).Hash.ToLowerInvariant()
+    $ManifestFiles = @(
+      [ordered]@{
+        path = 'teeworlds.nro'
+        download = $DownloadUrl
+        sha256 = $Sha256
+      }
+    )
+
+    $SettingsPath = Join-Path $ScriptDir 'settings07.cfg'
+    if (-not (Test-Path $SettingsPath)) {
+      throw "settings07.cfg was not found; cannot generate the update manifest."
+    }
+    $ManifestFiles += [ordered]@{
+      path = 'settings07.cfg'
+      download = "$DataUrlBase/settings07.cfg"
+      sha256 = (Get-FileHash -Algorithm SHA256 $SettingsPath).Hash.ToLowerInvariant()
+    }
+
+    # $DataRoot = Join-Path $BuildDir 'data'
+    # if (Test-Path $DataRoot) {
+    #   $DataRootFull = [System.IO.Path]::GetFullPath($DataRoot).TrimEnd('\', '/')
+    #   Get-ChildItem -Path $DataRoot -Recurse -File |
+    #     Sort-Object FullName |
+    #     ForEach-Object {
+    #       $FileFullPath = [System.IO.Path]::GetFullPath($_.FullName)
+    #       $RelativeDataPath = $FileFullPath.Substring($DataRootFull.Length).
+    #         TrimStart('\', '/').Replace('\', '/')
+    #       $RelativePath = "data/$RelativeDataPath"
+    #       $ManifestFiles += [ordered]@{
+    #         path = $RelativePath
+    #         download = "$DataUrlBase/$RelativePath"
+    #         sha256 = (Get-FileHash -Algorithm SHA256 $_.FullName).Hash.ToLowerInvariant()
+    #       }
+    #     }
+    # }
+
     $Manifest = [ordered]@{
       name = 'teeworlds'
       platform = 'switch'
@@ -116,9 +157,10 @@ try {
       build = [int64]$BuildMatch.Groups[1].Value
       download = $DownloadUrl
       sha256 = $Sha256
+      files = $ManifestFiles
     }
     $ManifestPath = Join-Path $ScriptDir 'teeworlds.json'
-    $Manifest | ConvertTo-Json | Set-Content -Encoding UTF8 $ManifestPath
+    $Manifest | ConvertTo-Json -Depth 6 | Set-Content -Encoding UTF8 $ManifestPath
 
     Write-Host 'Generated update manifest:'
     Write-Host "  $ManifestPath"

@@ -18,14 +18,16 @@ else
 	DATA_PATH="${SCRIPT_DIR}/${BUILD_DIR}/data"
 fi
 MANIFEST_PATH="${SCRIPT_DIR}/teeworlds.json"
+SETTINGS_PATH="${SCRIPT_DIR}/settings07.cfg"
 
 if ! command -v rsync >/dev/null 2>&1; then
 	echo "[ERROR] rsync was not found." >&2
 	exit 2
 fi
 
-if [[ ! -f "${NRO_PATH}" || ! -f "${MANIFEST_PATH}" || ! -d "${DATA_PATH}/mapres" ]]; then
-	echo "[ERROR] Missing ${NRO_PATH}, ${MANIFEST_PATH}, or ${DATA_PATH}/mapres." >&2
+if [[ ! -f "${NRO_PATH}" || ! -f "${MANIFEST_PATH}" ||
+	! -f "${SETTINGS_PATH}" || ! -d "${DATA_PATH}/mapres" ]]; then
+	echo "[ERROR] Missing ${NRO_PATH}, ${MANIFEST_PATH}, ${SETTINGS_PATH}, or ${DATA_PATH}/mapres." >&2
 	echo "Build the Switch target first with ./build.sh." >&2
 	exit 3
 fi
@@ -47,6 +49,11 @@ echo "Uploading game data to ${TARGET%/}/data/"
 rsync "${RSYNC_ARGS[@]}" \
 	"${DATA_PATH}/" \
 	"${TARGET%/}/data/"
+
+echo "Uploading settings07.cfg to ${TARGET}"
+rsync "${RSYNC_ARGS[@]}" \
+	"${SETTINGS_PATH}" \
+	"${TARGET}"
 
 echo "Uploading teeworlds.json to ${TARGET}"
 rsync "${RSYNC_ARGS[@]}" \

@@ -100,26 +100,87 @@ if [[ -f "${BUILD_DIR}/teeworlds.nro" ]]; then
 		"$VERSION_FILE")"
 	MANIFEST_URL="${TEEWORLDS_MANIFEST_URL:-http://192.168.22.7/switch/teeworlds/teeworlds.json}"
 	DOWNLOAD_URL="${TEEWORLDS_DOWNLOAD_URL:-http://192.168.22.7/switch/teeworlds/teeworlds.nro}"
+	DATA_URL_BASE="${TEEWORLDS_DATA_URL_BASE:-${DOWNLOAD_URL%/*}}"
 
 	if command -v sha256sum >/dev/null 2>&1; then
-		SHA256="$(sha256sum "${BUILD_DIR}/teeworlds.nro" | awk '{print $1}')"
+		sha256_file()
+		{
+			sha256sum "$1" | awk '{print $1}'
+		}
 	elif command -v shasum >/dev/null 2>&1; then
-		SHA256="$(shasum -a 256 "${BUILD_DIR}/teeworlds.nro" | awk '{print $1}')"
+		sha256_file()
+		{
+			shasum -a 256 "$1" | awk '{print $1}'
+		}
 	else
 		echo "sha256sum or shasum was not found." >&2
 		exit 3
 	fi
 
-	cat > teeworlds.json <<EOF
-{
-  "name": "teeworlds",
-  "platform": "switch",
-  "version": "${VERSION}",
-  "build": ${BUILD_NUMBER},
-  "download": "${DOWNLOAD_URL}",
-  "sha256": "${SHA256}"
-}
-EOF
+	if [[ ! -f settings07.cfg ]]; then
+		echo "settings07.cfg was not found; cannot generate the update manifest." >&2
+		exit 3
+	fi
+
+	json_escape()
+	{
+		local Value="$1"
+		Value="${Value//\\/\\\\}"
+		Value="${Value//\"/\\\"}"
+		printf '%s' "$Value"
+	}
+
+	SHA256="$(sha256_file "${BUILD_DIR}/teeworlds.nro")"
+	{
+		printf '{\n'
+		printf '  "name": "teeworlds",\n'
+		printf '  "platform": "switch",\n'
+		printf '  "version": "%s",\n' "$(json_escape "$VERSION")"
+		printf '  "build": %s,\n' "$BUILD_NUMBER"
+		printf '  "download": "%s",\n' "$(json_escape "$DOWNLOAD_URL")"
+		printf '  "sha256": "%s",\n' "$SHA256"
+		printf '  "files": [\n'
+
+		FirstFile=1
+		emit_file()
+		{
+			local RelativePath="$1"
+			local FilePath="$2"
+			local FileUrl="$3"
+			local FileSha256
+			FileSha256="$(sha256_file "$FilePath")"
+			if [[ "$FirstFile" != "1" ]]; then
+				printf ',\n'
+			fi
+			printf '    {"path": "%s", "download": "%s", "sha256": "%s"}' \
+				"$(json_escape "$RelativePath")" \
+				"$(json_escape "$FileUrl")" \
+				"$FileSha256"
+			FirstFile=0
+		}
+
+		emit_file \
+			"teeworlds.nro" \
+			"${BUILD_DIR}/teeworlds.nro" \
+			"$DOWNLOAD_URL"
+
+		emit_file \
+			"settings07.cfg" \
+			"settings07.cfg" \
+			"${DATA_URL_BASE%/}/settings07.cfg"
+
+		# DATA_DIR="${BUILD_DIR}/data"
+		# if [[ -d "$DATA_DIR" ]]; then
+		# 	while IFS= read -r -d '' DATA_FILE; do
+		# 		RELATIVE_PATH="${DATA_FILE#${BUILD_DIR}/}"
+		# 		FILE_URL="${DATA_URL_BASE%/}/${RELATIVE_PATH}"
+		# 		emit_file "$RELATIVE_PATH" "$DATA_FILE" "$FILE_URL"
+		# 	done < <(find "$DATA_DIR" -type f -print0 | sort -z)
+		# fi
+
+		printf '\n  ]\n'
+		printf '}\n'
+	} > teeworlds.json
 
 	echo "Generated update manifest:"
 	echo "  ${PWD}/teeworlds.json"
