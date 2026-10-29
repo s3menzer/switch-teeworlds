@@ -2557,7 +2557,16 @@ int main(int argc, const char **argv) // ignore_convention
 {
 	#if defined(__SWITCH__)
 		Switch::socketInitializeDefault();
-		Switch::nxlinkStdio();
+		// Capture printf, stderr and the engine's stdout logger on the SD card.
+		if(freopen("sdmc:/switch/teeworlds/teeworlds.txt", "w", stdout))
+		{
+			setvbuf(stdout, 0, _IONBF, 0);
+			if(freopen("sdmc:/switch/teeworlds/teeworlds.txt", "a", stderr))
+				setvbuf(stderr, 0, _IONBF, 0);
+			printf("Teeworlds Switch trace log started\n");
+		}
+		else
+			Switch::nxlinkStdio();
 	#endif
 #endif
 #if defined(CONF_FAMILY_WINDOWS)

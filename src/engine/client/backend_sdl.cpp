@@ -10,6 +10,7 @@
 #endif
 #if defined(__SWITCH__)
 	#include <switch/renderPatch.h>
+	#include <switch.h>
 #endif
 
 #include <base/tl/threading.h>
@@ -173,7 +174,9 @@ void CCommandProcessorFragment_OpenGL::SetState(const CCommandBuffer::SState &St
 	// texture
 	int SrcBlendMode = GL_ONE;
 	glDisable(GL_TEXTURE_2D);
-	glDisable(GL_TEXTURE_3D);
+	#if !defined(__SWITCH__)
+		glDisable(GL_TEXTURE_3D);
+	#endif
 	if(State.m_Texture >= 0 && State.m_Texture < CCommandBuffer::MAX_TEXTURES)
 	{
 		if(State.m_Dimension == 2 && (m_aTextures[State.m_Texture].m_State&CTexture::STATE_TEX2D))
@@ -181,11 +184,13 @@ void CCommandProcessorFragment_OpenGL::SetState(const CCommandBuffer::SState &St
 			glEnable(GL_TEXTURE_2D);
 			glBindTexture(GL_TEXTURE_2D, m_aTextures[State.m_Texture].m_Tex2D);
 		}
+		#if !defined(__SWITCH__)
 		else if(State.m_Dimension == 3 && (m_aTextures[State.m_Texture].m_State&CTexture::STATE_TEX3D))
 		{
 			glEnable(GL_TEXTURE_3D);
 			glBindTexture(GL_TEXTURE_3D, m_aTextures[State.m_Texture].m_Tex3D[State.m_TextureArrayIndex]);
 		}
+		#endif
 		else
 			dbg_msg("render", "invalid texture %d %d %d\n", State.m_Texture, State.m_Dimension, m_aTextures[State.m_Texture].m_State);
 
@@ -238,6 +243,7 @@ void CCommandProcessorFragment_OpenGL::SetState(const CCommandBuffer::SState &St
 		dbg_msg("render", "unknown wrapmode %d\n", State.m_WrapModeV);
 	};
 
+	#if !defined(__SWITCH__)
 	if(State.m_Texture >= 0 && State.m_Texture < CCommandBuffer::MAX_TEXTURES && State.m_Dimension == 3)
 	{
 		glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
@@ -247,6 +253,7 @@ void CCommandProcessorFragment_OpenGL::SetState(const CCommandBuffer::SState &St
 		glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_R, GL_REPEAT);
 
 	}
+	#endif
 
 	// screen mapping
 	glMatrixMode(GL_PROJECTION);
@@ -257,12 +264,27 @@ void CCommandProcessorFragment_OpenGL::SetState(const CCommandBuffer::SState &St
 void CCommandProcessorFragment_OpenGL::Cmd_Init(const SCommand_Init *pCommand)
 {
 	m_pTextureMemoryUsage = pCommand->m_pTextureMemoryUsage;
+	#if defined(__SWITCH__)
+		const GLubyte *pVendor = glGetString(GL_VENDOR);
+		const GLubyte *pRenderer = glGetString(GL_RENDERER);
+		const GLubyte *pVersion = glGetString(GL_VERSION);
+		GLint aViewport[4] = {0, 0, 0, 0};
+		glGetIntegerv(GL_VIEWPORT, aViewport);
+		dbg_msg("gfx", "GL vendor='%s' renderer='%s' version='%s'", pVendor ? (const char *)pVendor : "unknown", pRenderer ? (const char *)pRenderer : "unknown", pVersion ? (const char *)pVersion : "unknown");
+		dbg_msg("gfx", "initial GL viewport: %d x %d at %d,%d", aViewport[2], aViewport[3], aViewport[0], aViewport[1]);
+	#endif
 	glGetIntegerv(GL_MAX_TEXTURE_SIZE, &m_MaxTexSize);
-	glGetIntegerv(GL_MAX_3D_TEXTURE_SIZE, &m_Max3DTexSize);
+	#if defined(__SWITCH__)
+		// GLES 1.1 on Switch has no 3D textures. Use 2D atlas coordinates instead.
+		m_Max3DTexSize = 0;
+		m_TextureArraySize = 1;
+	#else
+		glGetIntegerv(GL_MAX_3D_TEXTURE_SIZE, &m_Max3DTexSize);
 	dbg_msg("render", "opengl max texture sizes: %d, %d(3D)", m_MaxTexSize, m_Max3DTexSize);
 	if(m_Max3DTexSize < IGraphics::NUMTILES_DIMENSION * IGraphics::NUMTILES_DIMENSION)
 		dbg_msg("render", "*** warning *** max 3D texture size is too low - using the fallback system");
 	m_TextureArraySize = IGraphics::NUMTILES_DIMENSION * IGraphics::NUMTILES_DIMENSION / min(m_Max3DTexSize, IGraphics::NUMTILES_DIMENSION * IGraphics::NUMTILES_DIMENSION);
+	#endif
 	*pCommand->m_pTextureArraySize = m_TextureArraySize;
 }
 
@@ -463,7 +485,19 @@ void CCommandProcessorFragment_OpenGL::Cmd_Render(const CCommandBuffer::SCommand
 	switch(pCommand->m_PrimType)
 	{
 	case CCommandBuffer::PRIMTYPE_QUADS:
+		#if defined(__SWITCH__)
+			// OpenGL ES 1.1 has no GL_QUADS primitive. Draw each quad as a fan.
+			for(unsigned i = 0; i < pCommand->m_PrimCount; ++i)
+			{
+				char *pVertices = (char *)pCommand->m_pVertices + i * 4 * sizeof(CCommandBuffer::SVertex);
+				glVertexPointer(3, GL_FLOAT, sizeof(CCommandBuffer::SVertex), pVertices);
+				glTexCoordPointer(3, GL_FLOAT, sizeof(CCommandBuffer::SVertex), pVertices + sizeof(float)*3);
+				glColorPointer(4, GL_FLOAT, sizeof(CCommandBuffer::SVertex), pVertices + sizeof(float)*6);
+				glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
+			}
+		#else
 		glDrawArrays(GL_QUADS, 0, pCommand->m_PrimCount*4);
+		#endif
 		break;
 	case CCommandBuffer::PRIMTYPE_LINES:
 		glDrawArrays(GL_LINES, 0, pCommand->m_PrimCount*2);
@@ -471,6 +505,16 @@ void CCommandProcessorFragment_OpenGL::Cmd_Render(const CCommandBuffer::SCommand
 	default:
 		dbg_msg("render", "unknown primtype %d\n", pCommand->m_Cmd);
 	};
+	#if defined(__SWITCH__)
+		static unsigned s_SwitchDebugDraws = 0;
+		if(s_SwitchDebugDraws < 8)
+		{
+			GLenum Error;
+			while((Error = glGetError()) != GL_NO_ERROR)
+				dbg_msg("gfx", "GL error 0x%04x after draw %u (type=%d, primitives=%u)", Error, s_SwitchDebugDraws, pCommand->m_PrimType, pCommand->m_PrimCount);
+			++s_SwitchDebugDraws;
+		}
+	#endif
 }
 
 void CCommandProcessorFragment_OpenGL::Cmd_Screenshot(const CCommandBuffer::SCommand_Screenshot *pCommand)
@@ -562,6 +606,11 @@ void CCommandProcessorFragment_SDL::Cmd_Shutdown(const SCommand_Shutdown *pComma
 void CCommandProcessorFragment_SDL::Cmd_Swap(const CCommandBuffer::SCommand_Swap *pCommand)
 {
 	SDL_GL_SwapWindow(m_pWindow);
+	#if defined(__SWITCH__)
+		static unsigned s_SwitchSwapCount = 0;
+		if(s_SwitchSwapCount < 5)
+			dbg_msg("gfx", "SDL_GL_SwapWindow called (%u)", ++s_SwitchSwapCount);
+	#endif
 
 	if(pCommand->m_Finish)
 		glFinish();
@@ -718,6 +767,15 @@ int CGraphicsBackend_SDL_OpenGL::Init(const char *pName, int *Screen, int *pWind
 		SDL_SetHint(SDL_HINT_VIDEO_X11_XRANDR, "1");
 
 	// set gl attributes
+	#if defined(__SWITCH__)
+		// The renderer uses the fixed-function GLES 1.1 API. Without an explicit
+		// request SDL/Mesa selects its GLES 3.2 context, where those calls fail.
+		const int ProfileResult = SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
+		const int MajorVersionResult = SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 1);
+		const int MinorVersionResult = SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 1);
+		if(ProfileResult != 0 || MajorVersionResult != 0 || MinorVersionResult != 0)
+			dbg_msg("gfx", "unable to request OpenGL ES 1.1 context: %s", SDL_GetError());
+	#endif
 	SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
 	if(FsaaSamples)
 	{
@@ -749,6 +807,18 @@ int CGraphicsBackend_SDL_OpenGL::Init(const char *pName, int *Screen, int *pWind
 
 	SDL_GetWindowSize(m_pWindow, pWindowWidth, pWindowHeight);
 	SDL_GL_GetDrawableSize(m_pWindow, pScreenWidth, pScreenHeight); // drawable size may differ in high dpi mode
+	#if defined(__SWITCH__)
+		// switch-mesa may report an EGL surface size of 0x0. Use the libnx window size
+		// so projection and viewport calculations use the actual display dimensions.
+		u32 NativeWidth = 0;
+		u32 NativeHeight = 0;
+		if(R_SUCCEEDED(nwindowGetDimensions(nwindowGetDefault(), &NativeWidth, &NativeHeight)) && NativeWidth > 0 && NativeHeight > 0)
+		{
+			*pWindowWidth = *pScreenWidth = NativeWidth;
+			*pWindowHeight = *pScreenHeight = NativeHeight;
+			dbg_msg("gfx", "Switch native window size: %u x %u", NativeWidth, NativeHeight);
+		}
+	#endif
 
 	// create gl context
 	m_GLContext = SDL_GL_CreateContext(m_pWindow);

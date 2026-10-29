@@ -356,11 +356,17 @@ IGraphics::CTextureHandle CGraphics_Threaded::LoadTextureRaw(int Width, int Heig
 		Cmd.m_Flags |= CCommandBuffer::TEXFLAG_QUALITY;
 	if(Flags&IGraphics::TEXLOAD_ARRAY_256)
 	{
+		#if !defined(__SWITCH__)
 		Cmd.m_Flags |= CCommandBuffer::TEXFLAG_TEXTURE3D;
 		Cmd.m_Flags &= ~CCommandBuffer::TEXFLAG_TEXTURE2D;
+		#endif
 	}
 	if(Flags&IGraphics::TEXLOAD_MULTI_DIMENSION)
+	{
+		#if !defined(__SWITCH__)
 		Cmd.m_Flags |= CCommandBuffer::TEXFLAG_TEXTURE3D;
+		#endif
+	}
 	if(Flags&IGraphics::TEXLOAD_LINEARMIPMAPS)
 		Cmd.m_Flags |= CCommandBuffer::TEXTFLAG_LINEARMIPMAPS;
 
@@ -590,6 +596,17 @@ void CGraphics_Threaded::TilesetFallbackSystem(int TextureIndex)
 void CGraphics_Threaded::QuadsSetSubset(float TlU, float TlV, float BrU, float BrV, int TextureIndex)
 {
 	dbg_assert(m_Drawing == DRAWING_QUADS, "called Graphics()->QuadsSetSubset without begin");
+	#if defined(__SWITCH__)
+	if(TextureIndex >= 0)
+	{
+		const float TileU = (TextureIndex & 15) / 16.0f;
+		const float TileV = ((TextureIndex >> 4) & 15) / 16.0f;
+		TlU = TileU + TlU / 16.0f;
+		BrU = TileU + BrU / 16.0f;
+		TlV = TileV + TlV / 16.0f;
+		BrV = TileV + BrV / 16.0f;
+	}
+	#endif
 
 	// tileset fallback system
 	if(m_pBackend->GetTextureArraySize() > 1 && TextureIndex >= 0)
@@ -604,13 +621,28 @@ void CGraphics_Threaded::QuadsSetSubset(float TlU, float TlV, float BrU, float B
 	m_aTexture[3].v = BrV;	m_aTexture[2].v = BrV;
 
 	m_aTexture[0].i = m_aTexture[1].i = m_aTexture[2].i = m_aTexture[3].i = (0.5f + TextureIndex) / (256.0f/m_pBackend->GetTextureArraySize());
+	#if defined(__SWITCH__)
+	m_State.m_Dimension = 2;
+	#else
 	m_State.m_Dimension = (TextureIndex < 0) ? 2 : 3;
+	#endif
 }
 
 void CGraphics_Threaded::QuadsSetSubsetFree(
 	float x0, float y0, float x1, float y1,
 	float x2, float y2, float x3, float y3, int TextureIndex)
 {
+	#if defined(__SWITCH__)
+	if(TextureIndex >= 0)
+	{
+		const float TileU = (TextureIndex & 15) / 16.0f;
+		const float TileV = ((TextureIndex >> 4) & 15) / 16.0f;
+		x0 = TileU + x0 / 16.0f; y0 = TileV + y0 / 16.0f;
+		x1 = TileU + x1 / 16.0f; y1 = TileV + y1 / 16.0f;
+		x2 = TileU + x2 / 16.0f; y2 = TileV + y2 / 16.0f;
+		x3 = TileU + x3 / 16.0f; y3 = TileV + y3 / 16.0f;
+	}
+	#endif
 	// tileset fallback system
 	if(m_pBackend->GetTextureArraySize() > 1 && TextureIndex >= 0)
 		TilesetFallbackSystem(TextureIndex);
@@ -623,7 +655,11 @@ void CGraphics_Threaded::QuadsSetSubsetFree(
 	m_aTexture[3].u = x3; m_aTexture[3].v = y3;
 
 	m_aTexture[0].i = m_aTexture[1].i = m_aTexture[2].i = m_aTexture[3].i = (0.5f + TextureIndex) / (256.0f/m_pBackend->GetTextureArraySize());
+	#if defined(__SWITCH__)
+	m_State.m_Dimension = 2;
+	#else
 	m_State.m_Dimension = (TextureIndex < 0) ? 2 : 3;
+	#endif
 }
 
 void CGraphics_Threaded::QuadsDraw(CQuadItem *pArray, int Num)

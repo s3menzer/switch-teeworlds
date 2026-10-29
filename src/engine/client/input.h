@@ -21,6 +21,10 @@ class CInput : public IEngineInput
 	char *m_pClipboardText;
 
 	int m_PreviousHat;
+	#if defined(__SWITCH__)
+	int m_SwitchMouseX;
+	int m_SwitchMouseY;
+	#endif
 
 	bool m_MouseDoubleClick;
 
