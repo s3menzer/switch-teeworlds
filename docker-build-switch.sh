@@ -56,6 +56,6 @@ exec "$ENGINE" run --rm "${TTY_ARGS[@]}" \
 		echo "Installing switch-harfbuzz in the container...";
 		dkp-pacman -S --needed --noconfirm switch-harfbuzz;
 	fi;
-	./build.sh "$@"' \
+	./build-switch.sh "$@"' \
 	docker-build \
 	"$@"
