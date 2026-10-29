@@ -28,6 +28,11 @@ if [[ -z "$VOLUME_SUFFIX" && "$(basename "$ENGINE")" == podman* ]]; then
 	VOLUME_SUFFIX=":Z"
 fi
 
+CONTAINER_AUTO_BUILD_NUMBER="${AUTO_BUILD_NUMBER:-1}"
+if [[ "${SKIP_BUILD_INCREMENT:-0}" == "1" ]]; then
+	CONTAINER_AUTO_BUILD_NUMBER=0
+fi
+
 USER_ARGS=()
 if [[ "${CONTAINER_USE_HOST_USER:-0}" == "1" ]]; then
 	USER_ARGS+=(--user "$(id -u):$(id -g)")
@@ -45,6 +50,10 @@ exec "$ENGINE" run --rm "${TTY_ARGS[@]}" \
 	-e LIBNX=/opt/devkitpro/libnx \
 	-e PORTLIBS=/opt/devkitpro/portlibs \
 	-e INSTALL_SWITCH_HARFBUZZ="${INSTALL_SWITCH_HARFBUZZ:-1}" \
+	-e AUTO_BUILD_NUMBER="$CONTAINER_AUTO_BUILD_NUMBER" \
+	-e BUILD_DIR="${BUILD_DIR:-build-switch}" \
+	-e BUILD_TYPE="${BUILD_TYPE:-Release}" \
+	-e JOBS="${JOBS:-}" \
 	-v "${SCRIPT_DIR}:/workspace${VOLUME_SUFFIX}" \
 	-w /workspace \
 	"$IMAGE" \

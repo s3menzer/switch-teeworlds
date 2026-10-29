@@ -8,4 +8,4 @@
 	branch = master
 [submodule "src/updater"]
 	path = src/updater
-	url = https://github.com/s3menzer/switch-app-updater.git
+	url = git@github.com:s3menzer/switch-app-updater.git

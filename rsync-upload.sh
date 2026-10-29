@@ -7,8 +7,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Upload the NRO first and the manifest second. This ordering prevents a
 # client from seeing a manifest that points at an artifact not yet present on
 # the server.
-TARGET="${RSYNC_TARGET:-pi:/var/www/html/switch/}"
-BUILD_DIR="${BUILD_DIR:-build}"
+TARGET="${RSYNC_TARGET:-pi:/var/www/html/switch/teeworlds}"
+BUILD_DIR="${BUILD_DIR:-build-switch}"
 
 if [[ "${BUILD_DIR}" = /* ]]; then
 	NRO_PATH="${BUILD_DIR}/teeworlds.nro"
