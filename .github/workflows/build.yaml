@@ -9,6 +9,9 @@ permissions:
   contents: read
 
 env:
+  # Temporary local-worktree mode for the self-hosted runner. Set to "0" to
+  # restore the normal GitHub checkout and submodule initialization.
+  USE_LOCAL_WORKTREE: "1"
   # Set PRIVATE_REPO_TOKEN to a PAT or GitHub App token with read access to
   # private repositories used as submodules. Public repositories continue to
   # use the workflow's built-in token.
@@ -44,11 +47,14 @@ jobs:
             LDFLAGS: /WX
 
     steps:
-    - uses: actions/checkout@v4
+    - name: Checkout repository
+      if: ${{ env.USE_LOCAL_WORKTREE != '1' }}
+      uses: actions/checkout@v4
       with:
         token: ${{ env.CHECKOUT_TOKEN }}
         persist-credentials: true
     - name: Checkout submodules
+      if: ${{ env.USE_LOCAL_WORKTREE != '1' }}
       shell: bash
       run: |
         git config --global --add safe.directory "$GITHUB_WORKSPACE"
@@ -137,11 +143,14 @@ jobs:
       AUTO_BUILD_NUMBER: "1"
       INSTALL_SWITCH_HARFBUZZ: "1"
     steps:
-    - uses: actions/checkout@v4
+    - name: Checkout repository
+      if: ${{ env.USE_LOCAL_WORKTREE != '1' }}
+      uses: actions/checkout@v4
       with:
         token: ${{ env.CHECKOUT_TOKEN }}
         persist-credentials: true
     - name: Checkout submodules
+      if: ${{ env.USE_LOCAL_WORKTREE != '1' }}
       run: |
         set -euo pipefail
         export PATH="$DEVKITA64/bin:$DEVKITPRO/tools/bin:$DEVKITPRO/pacman/bin:$DEVKITPRO/portlibs/switch/bin:$PATH"
@@ -188,11 +197,14 @@ jobs:
         os: [ubuntu-latest, macOS-latest, windows-latest]
 
     steps:
-    - uses: actions/checkout@v4
+    - name: Checkout repository
+      if: ${{ env.USE_LOCAL_WORKTREE != '1' }}
+      uses: actions/checkout@v4
       with:
         token: ${{ env.CHECKOUT_TOKEN }}
         persist-credentials: true
     - name: Checkout submodules
+      if: ${{ env.USE_LOCAL_WORKTREE != '1' }}
       shell: bash
       run: |
         git config --global --add safe.directory "$GITHUB_WORKSPACE"
