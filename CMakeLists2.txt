@@ -1562,10 +1562,7 @@ if(CLIENT)
   )
   set(CLIENT_SRC ${PLATFORM_CLIENT} ${ENGINE_CLIENT} ${GAME_CLIENT} ${GAME_EDITOR} ${GAME_GENERATED_CLIENT})
   if(SWITCH)
-    list(APPEND CLIENT_SRC
-      src/updater/updater.cpp
-      src/updater/updater.hpp
-    )
+    add_subdirectory(src/updater)
   endif()
 
   set(DEPS_CLIENT ${DEPS} ${PNGLITE_DEP} ${WAVPACK_DEP})
@@ -1607,6 +1604,9 @@ if(CLIENT)
   )
   if(TARGET_OS STREQUAL "windows")
     target_compile_definitions(${TARGET_CLIENT} PRIVATE SDL_MAIN_HANDLED)
+  endif()
+  if(SWITCH)
+    target_link_libraries(${TARGET_CLIENT} switch-updater)
   endif()
   target_link_libraries(${TARGET_CLIENT} ${LIBS_CLIENT})
 

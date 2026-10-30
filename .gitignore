@@ -34,7 +34,7 @@ packetgen*
 teeworlds*
 !teeworlds.manifest
 !teeworlds.rc
-teeworlds.json
+teeworlds.xml
 teeworlds_srv*
 testrunner
 versionsrv*

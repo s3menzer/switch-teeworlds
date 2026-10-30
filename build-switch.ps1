@@ -22,7 +22,7 @@ if ($args.Count -gt 0 -and $args[0] -eq 'clean') {
       Write-Warning 'The clean target failed; continuing with manifest cleanup.'
     }
   }
-  Remove-Item -Force -ErrorAction SilentlyContinue (Join-Path $ScriptDir 'teeworlds.json')
+  Remove-Item -Force -ErrorAction SilentlyContinue (Join-Path $ScriptDir 'teeworlds.xml')
   exit 0
 }
 
@@ -98,7 +98,7 @@ try {
     }
 
     $ManifestUrl = if ([string]::IsNullOrEmpty($env:TEEWORLDS_MANIFEST_URL)) {
-      'http://192.168.22.7/switch/teeworlds/teeworlds.json'
+      'http://192.168.22.7/switch/teeworlds/teeworlds.xml'
     } else {
       $env:TEEWORLDS_MANIFEST_URL
     }
@@ -113,54 +113,23 @@ try {
       $env:TEEWORLDS_DATA_URL_BASE.TrimEnd('/')
     }
 
-    $Sha256 = (Get-FileHash -Algorithm SHA256 $NroPath).Hash.ToLowerInvariant()
-    $ManifestFiles = @(
-      [ordered]@{
-        path = 'teeworlds.nro'
-        download = $DownloadUrl
-        sha256 = $Sha256
-      }
-    )
-
+    $ManifestPath = Join-Path $ScriptDir 'teeworlds.xml'
+    $ManifestTool = Join-Path $ScriptDir 'src/updater/scripts/create_manifest.py'
+    $Python = if ([string]::IsNullOrEmpty($env:PYTHON)) { 'python' } else { $env:PYTHON }
     $SettingsPath = Join-Path $ScriptDir 'settings07.cfg'
-    if (-not (Test-Path $SettingsPath)) {
-      throw "settings07.cfg was not found; cannot generate the update manifest."
+    $ManifestArguments = @(
+      '--output', $ManifestPath,
+      '--name', 'teeworlds',
+      '--platform', 'switch',
+      '--version', $GameVersionMatch.Groups[1].Value,
+      '--build', $BuildMatch.Groups[1].Value,
+      '--file', 'teeworlds.nro', $DownloadUrl, $NroPath,
+      '--file', 'settings07.cfg', "$DataUrlBase/settings07.cfg", $SettingsPath
+    )
+    & $Python $ManifestTool @ManifestArguments
+    if ($LASTEXITCODE -ne 0) {
+      throw 'Could not generate the update manifest.'
     }
-    $ManifestFiles += [ordered]@{
-      path = 'settings07.cfg'
-      download = "$DataUrlBase/settings07.cfg"
-      sha256 = (Get-FileHash -Algorithm SHA256 $SettingsPath).Hash.ToLowerInvariant()
-    }
-
-    # $DataRoot = Join-Path $BuildDir 'data'
-    # if (Test-Path $DataRoot) {
-    #   $DataRootFull = [System.IO.Path]::GetFullPath($DataRoot).TrimEnd('\', '/')
-    #   Get-ChildItem -Path $DataRoot -Recurse -File |
-    #     Sort-Object FullName |
-    #     ForEach-Object {
-    #       $FileFullPath = [System.IO.Path]::GetFullPath($_.FullName)
-    #       $RelativeDataPath = $FileFullPath.Substring($DataRootFull.Length).
-    #         TrimStart('\', '/').Replace('\', '/')
-    #       $RelativePath = "data/$RelativeDataPath"
-    #       $ManifestFiles += [ordered]@{
-    #         path = $RelativePath
-    #         download = "$DataUrlBase/$RelativePath"
-    #         sha256 = (Get-FileHash -Algorithm SHA256 $_.FullName).Hash.ToLowerInvariant()
-    #       }
-    #     }
-    # }
-
-    $Manifest = [ordered]@{
-      name = 'teeworlds'
-      platform = 'switch'
-      version = $GameVersionMatch.Groups[1].Value
-      build = [int64]$BuildMatch.Groups[1].Value
-      download = $DownloadUrl
-      sha256 = $Sha256
-      files = $ManifestFiles
-    }
-    $ManifestPath = Join-Path $ScriptDir 'teeworlds.json'
-    $Manifest | ConvertTo-Json -Depth 6 | Set-Content -Encoding UTF8 $ManifestPath
 
     Write-Host 'Generated update manifest:'
     Write-Host "  $ManifestPath"

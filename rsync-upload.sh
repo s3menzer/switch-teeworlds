@@ -17,7 +17,7 @@ else
 	NRO_PATH="${SCRIPT_DIR}/${BUILD_DIR}/teeworlds.nro"
 	DATA_PATH="${SCRIPT_DIR}/${BUILD_DIR}/data"
 fi
-MANIFEST_PATH="${SCRIPT_DIR}/teeworlds.json"
+MANIFEST_PATH="${SCRIPT_DIR}/teeworlds.xml"
 SETTINGS_PATH="${SCRIPT_DIR}/settings07.cfg"
 
 if ! command -v rsync >/dev/null 2>&1; then
@@ -55,7 +55,7 @@ rsync "${RSYNC_ARGS[@]}" \
 	"${SETTINGS_PATH}" \
 	"${TARGET}"
 
-echo "Uploading teeworlds.json to ${TARGET}"
+echo "Uploading teeworlds.xml to ${TARGET}"
 rsync "${RSYNC_ARGS[@]}" \
 	"${MANIFEST_PATH}" \
 	"${TARGET}"
