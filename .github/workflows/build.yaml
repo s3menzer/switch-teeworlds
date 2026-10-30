@@ -16,7 +16,7 @@ env:
 
 jobs:
   build-cmake:
-    runs-on: [self-hosted, z-book]
+    runs-on: [self-hosted]
     strategy:
       matrix:
         os: [ubuntu-latest, macOS-latest, windows-latest]
@@ -120,7 +120,7 @@ jobs:
 
   build-switch:
     name: Build Nintendo Switch
-    runs-on: [self-hosted, z-book]
+    runs-on: [self-hosted]
     container:
       image: docker.io/devkitpro/devkita64:latest
       options: --user root
@@ -182,7 +182,7 @@ jobs:
         if-no-files-found: error
 
   build-bam:
-    runs-on: [self-hosted, z-book]
+    runs-on: [self-hosted]
     strategy:
       matrix:
         os: [ubuntu-latest, macOS-latest, windows-latest]
