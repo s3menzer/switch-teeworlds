@@ -6,6 +6,8 @@
 #include <stdio.h>
 #if defined(__SWITCH__)
 	#include <switch/dbg.h>
+	#include <sys/stat.h>
+	#include <time.h>
 #endif
 
 #include <new>
@@ -15,6 +17,16 @@
 
 #include <base/math.h>
 #include <base/system.h>
+
+#if defined(CONF_FAMILY_WINDOWS)
+	#ifndef WIN32_LEAN_AND_MEAN
+		#define WIN32_LEAN_AND_MEAN
+	#endif
+	#ifndef NOMINMAX
+		#define NOMINMAX
+	#endif
+	#include <windows.h>
+#endif
 
 #include <engine/client.h>
 #include <engine/config.h>
@@ -748,8 +760,15 @@ const char *CClient::ErrorString() const
 
 void CClient::Render()
 {
+#if defined(__SWITCH__)
+	// The Switch back buffer can retain pixels from the previous frame.
+	// Clear it every frame so moving cursors and UI overlays do not leave
+	// stale copies behind.
+	Graphics()->Clear(0, 0, 0);
+#else
 	if(g_Config.m_GfxClear)
 		Graphics()->Clear(1,1,0);
+#endif
 
 	GameClient()->OnRender();
 	DebugRender();
@@ -1991,6 +2010,17 @@ void CClient::Run()
 
 	while (1)
 	{
+#if defined(__SWITCH__)
+		/*
+			libnx requires the application lifecycle to be serviced from the
+			main loop. Without this call, the application can stop responding
+			after remaining on a menu for a while, even though the render loop
+			is otherwise idle.
+		*/
+		if(!Switch::appletMainLoop())
+			break;
+#endif
+
 		//
 		VersionUpdate();
 
@@ -2009,6 +2039,18 @@ void CClient::Run()
 		// update sound
 		Sound()->Update();
 
+#if defined(__SWITCH__)
+		/*
+			The Nintendo software keyboard runs as a separate applet. Do not run
+			the desktop focus/refocus state machine on Switch: SDL window focus
+			events are not reliable while the applet is active and repeatedly
+			toggling relative mouse mode can leave menu input stuck.
+
+			The keyboard path explicitly restores relative mouse mode after the
+			applet closes.
+		*/
+		m_WindowMustRefocus = 0;
+#else
 		// release focus
 		if(!m_pGraphics->WindowActive())
 		{
@@ -2042,6 +2084,7 @@ void CClient::Run()
 					g_Config.m_GfxScreen = ActScreen;
 			}
 		}
+#endif
 
 		// panic quit button
 		bool IsCtrlPressed = Input()->KeyIsPressed(KEY_LCTRL);
@@ -2548,6 +2591,141 @@ void CClient::DoVersionSpecificActions()
 	Prediction Latency
 		Upstream latency
 */
+#if defined(__SWITCH__)
+namespace
+{
+	char g_aSwitchAppDirectory[512] = ".";
+	bool g_SwitchDebugLogging = false;
+
+	void SwitchSetAppDirectory(const char *pExecutablePath)
+	{
+		if(!pExecutablePath || !pExecutablePath[0])
+		{
+			str_copy(g_aSwitchAppDirectory, ".", sizeof(g_aSwitchAppDirectory));
+			return;
+		}
+
+		unsigned SlashPos = ~0U;
+		for(unsigned i = 0; pExecutablePath[i]; ++i)
+		{
+			if(pExecutablePath[i] == '/' || pExecutablePath[i] == '\\')
+				SlashPos = i;
+		}
+
+		if(SlashPos == ~0U || SlashPos >= sizeof(g_aSwitchAppDirectory))
+			str_copy(g_aSwitchAppDirectory, ".", sizeof(g_aSwitchAppDirectory));
+		else if(SlashPos == 0)
+			str_copy(g_aSwitchAppDirectory, "/", sizeof(g_aSwitchAppDirectory));
+		else
+		{
+			mem_copy(g_aSwitchAppDirectory, pExecutablePath, SlashPos);
+			g_aSwitchAppDirectory[SlashPos] = 0;
+		}
+
+		if(!fs_is_dir(g_aSwitchAppDirectory))
+			str_copy(g_aSwitchAppDirectory, ".", sizeof(g_aSwitchAppDirectory));
+
+		// Chain-loading through hbloader can restore the working directory to
+		// the SD-card root. Make relative data and user paths resolve beside
+		// the actual game NRO.
+		fs_chdir(g_aSwitchAppDirectory);
+	}
+
+	void SwitchMakePath(const char *pRelativePath, char *pBuffer, unsigned BufferSize)
+	{
+		const char *pSeparator =
+			g_aSwitchAppDirectory[str_length(g_aSwitchAppDirectory) - 1] == '/' ? "" : "/";
+		str_format(
+			pBuffer,
+			BufferSize,
+			"%s%s%s",
+			g_aSwitchAppDirectory,
+			pSeparator,
+			pRelativePath);
+	}
+
+	const char *SwitchTraceFilePath()
+	{
+		static char aPath[512];
+		SwitchMakePath("teeworlds.txt", aPath, sizeof(aPath));
+		return aPath;
+	}
+
+	bool SwitchTraceFileIsFromToday()
+	{
+		struct stat FileInfo;
+		if(stat(SwitchTraceFilePath(), &FileInfo) != 0)
+			return false;
+
+		const time_t CurrentTime = time(nullptr);
+		struct tm CurrentDate;
+		struct tm TraceDate;
+		if(localtime_r(&CurrentTime, &CurrentDate) == nullptr ||
+			localtime_r(&FileInfo.st_mtime, &TraceDate) == nullptr)
+			return false;
+
+		return CurrentDate.tm_year == TraceDate.tm_year &&
+			CurrentDate.tm_yday == TraceDate.tm_yday;
+	}
+
+	void SwitchPrintLine(const char *pMessage)
+	{
+		if(!g_SwitchDebugLogging || !pMessage)
+			return;
+
+		printf("%s\n", pMessage);
+	}
+
+	bool SwitchDebugLoggingEnabled()
+	{
+		const char *const apRelativeConfigPaths[] = {
+			"settings07.cfg",
+			"settings.cfg",
+			"data/settings07.cfg",
+			"data/settings.cfg",
+		};
+
+		for(const char *pRelativeConfigPath : apRelativeConfigPaths)
+		{
+			char aConfigPath[512];
+			SwitchMakePath(pRelativeConfigPath, aConfigPath, sizeof(aConfigPath));
+			FILE *pFile = fopen(aConfigPath, "r");
+			if(!pFile)
+				continue;
+
+			char aLine[256];
+			while(fgets(aLine, sizeof(aLine), pFile))
+			{
+				char aCommand[64];
+				int Debug = 0;
+				if(sscanf(aLine, " %63s %d", aCommand, &Debug) == 2 &&
+					str_comp(aCommand, "debug") == 0)
+				{
+					fclose(pFile);
+					return Debug != 0;
+				}
+			}
+
+			fclose(pFile);
+			return false;
+		}
+
+		return false;
+	}
+
+	const char *SwitchUserConfigFilename()
+	{
+		/*
+			settings07.cfg is an update artifact. It must stay immutable so the
+			updater can replace it with the defaults/debug configuration from
+			the manifest. User settings are kept separately next to the NRO.
+		*/
+		return "config.cfg";
+	}
+
+}
+#endif
+
 #if defined(CONF_PLATFORM_MACOSX)
 extern "C" int SDL_main(int argc, char **argv_) // ignore_convention
 {
@@ -2555,9 +2733,68 @@ extern "C" int SDL_main(int argc, char **argv_) // ignore_convention
 #else
 int main(int argc, const char **argv) // ignore_convention
 {
+#if defined(CONF_FAMILY_WINDOWS)
+	SDL_SetMainReady();
+#endif
 	#if defined(__SWITCH__)
+		Switch::fsdevMountSdmc();
+		// hbmenu passes the selected NRO's absolute path as argv[1].
+		// argv[0] identifies the loader and can point at the SD root.
+		SwitchSetAppDirectory(
+			argc > 1 ? argv[1] : (argc > 0 ? argv[0] : nullptr));
+		const bool DebugLogging = SwitchDebugLoggingEnabled();
+		g_SwitchDebugLogging = DebugLogging;
+		const Switch::Result RomfsResult = Switch::romfsInit();
+		if(R_FAILED(RomfsResult))
+			SwitchPrintLine("Switch RomFS mount failed");
+		else
+			SwitchPrintLine("Switch RomFS mounted");
+
+		if(DebugLogging)
+		{
+			const char *pTraceMode =
+				SwitchTraceFileIsFromToday() ? "a" : "w";
+			FILE *pTraceFile = fopen(SwitchTraceFilePath(), pTraceMode);
+			if(pTraceFile)
+			{
+				fclose(pTraceFile);
+				if(freopen(SwitchTraceFilePath(), "a", stdout))
+					setvbuf(stdout, 0, _IONBF, 0);
+				if(freopen(SwitchTraceFilePath(), "a", stderr))
+					setvbuf(stderr, 0, _IONBF, 0);
+			}
+		}
+		else
+			Switch::nxlinkStdio();
+
 		Switch::socketInitializeDefault();
-		Switch::nxlinkStdio();
+		SwitchPrintLine("Teeworlds game.nro started");
+		char aSwitchPathMessage[1024];
+		if(argc > 1 && argv[1])
+		{
+			str_format(
+				aSwitchPathMessage,
+				sizeof(aSwitchPathMessage),
+				"Switch launcher argument=%s",
+				argv[1]);
+			SwitchPrintLine(aSwitchPathMessage);
+		}
+		str_format(
+			aSwitchPathMessage,
+			sizeof(aSwitchPathMessage),
+			"Switch app directory=%s",
+			g_aSwitchAppDirectory);
+		SwitchPrintLine(aSwitchPathMessage);
+		char aCurrentDirectory[512];
+		if(fs_getcwd(aCurrentDirectory, sizeof(aCurrentDirectory)))
+		{
+			str_format(
+				aSwitchPathMessage,
+				sizeof(aSwitchPathMessage),
+				"Switch current directory=%s",
+				aCurrentDirectory);
+			SwitchPrintLine(aSwitchPathMessage);
+		}
 	#endif
 #endif
 #if defined(CONF_FAMILY_WINDOWS)
@@ -2653,6 +2890,13 @@ int main(int argc, const char **argv) // ignore_convention
 		if(!pConsole->ExecuteFile(SETTINGS_FILENAME ".cfg"))
 			pConsole->ExecuteFile("settings.cfg"); // fallback to legacy naming scheme
 
+#if defined(__SWITCH__)
+		// Do not let pConfig->Save() overwrite settings07.cfg. That file is
+		// distributed by the updater and contains the startup diagnostics.
+		// Keep mutable user settings in a separate file instead.
+		pConsole->ExecuteFile(SwitchUserConfigFilename());
+#endif
+
 		// execute autoexec file
 		pConsole->ExecuteFile("autoexec.cfg");
 
@@ -2703,7 +2947,11 @@ int main(int argc, const char **argv) // ignore_convention
 		Switch::socketExit();
 	#endif
 	// write down the config and quit
+#if defined(__SWITCH__)
+	pConfig->Save(SwitchUserConfigFilename());
+#else
 	pConfig->Save();
+#endif
 
 #if defined(CONF_FAMILY_WINDOWS)
 	if(!HideConsole && !QuickEditMode)

@@ -4,13 +4,33 @@
 #
 # libnx CMake template for Nintendo Switch homebrew development.
 
+cmake_minimum_required(VERSION 3.13)
+
+file(STRINGS src/game/version.h VERSION_LINE
+        LIMIT_COUNT 1
+        REGEX GAME_RELEASE_VERSION
+)
+
+if(VERSION_LINE MATCHES "\"([0-9]+)\\.([0-9]+)\\.([0-9]+|[0-9]+\\.[0-9]+)\"")
+    set(VERSION_MAJOR ${CMAKE_MATCH_1})
+    set(VERSION_MINOR ${CMAKE_MATCH_2})
+    set(VERSION_PATCH ${CMAKE_MATCH_3})
+elseif(VERSION_LINE MATCHES "\"([0-9]+)\\.([0-9]+)\"")
+    set(VERSION_MAJOR ${CMAKE_MATCH_1})
+    set(VERSION_MINOR ${CMAKE_MATCH_2})
+    set(VERSION_PATCH "0")
+else()
+    message(FATAL_ERROR "Couldn't parse version from src/game/version.h")
+endif()
+
+project(teeworlds
+        VERSION ${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_PATCH}
+        LANGUAGES C CXX)
 
 if(NOT SWITCH)
 set(HOMEBREW_APP "teeworlds")
 include(CMakeLists2.txt)
 else()
-cmake_minimum_required(VERSION 3.1)
-
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 include(options)
 include(utils)
@@ -46,13 +66,14 @@ endif ()
 include_directories(${PROJECT_BINARY_DIR} ${DEVKITPRO}/libnx/include ${PORTLIBS}/include)
 link_directories(${PORTLIBS}/lib)
 
-# Replace this with the name of your application
-set(HOMEBREW_APP "teeworlds")
+# The homebrew entry point is the updater/launcher. The actual game is built
+# as a separate NRO and is started by the launcher after the update check.
+set(HOMEBREW_APP "game")
 
 # Meta information about the app
-set(APP_TITLE ${HOMEBREW_APP})
-set(APP_AUTHOR "Flyingsky")
-set(APP_ICON "../assets/teeworlds.jpg")
+set(APP_TITLE "Teeworlds")
+set(APP_AUTHOR "menzer")
+set(APP_ICON "${CMAKE_CURRENT_SOURCE_DIR}/assets/teeworld.png")
 
 
 if (NOT DEFINED CMAKE_BUILD_TYPE_INIT)
@@ -85,6 +106,9 @@ target_link_libraries(${HOMEBREW_APP}.elf switch::bz2)
 find_package(PNG)
 target_link_libraries(${HOMEBREW_APP}.elf switch::png)
 
+find_package(HarfBuzz REQUIRED)
+target_link_libraries(${HOMEBREW_APP}.elf switch::harfbuzz)
+
 find_package(EGL)
 target_link_libraries(${HOMEBREW_APP}.elf switch::egl)
 
@@ -102,6 +126,44 @@ set_target_properties(${HOMEBREW_APP}.elf PROPERTIES
         LINK_FLAGS "-specs=${LIBNX}/switch.specs -Wl,-no-as-needed -Wl,-Map,.map")
 
 build_switch_binaries(${HOMEBREW_APP}.elf)
+
+# Build a small launcher NRO separately. It is the file started by hbmenu
+# (/switch/teeworlds/teeworlds.nro); the game itself lives in game.nro.
+add_executable(teeworlds.elf
+        ${SWITCH_UPDATER_LAUNCHER_SOURCE}
+)
+target_include_directories(teeworlds.elf PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/src"
+        "${PROJECT_BINARY_DIR}/src"
+)
+target_compile_definitions(teeworlds.elf PRIVATE
+        SWITCH_UPDATER_APPLICATION_NAME="teeworlds"
+        SWITCH_UPDATER_CURRENT_VERSION="${APP_VERSION}"
+        SWITCH_UPDATER_MANIFEST_URL="http://192.168.22.7/switch/teeworlds/manifests.json"
+)
+add_dependencies(teeworlds.elf game-shared)
+target_link_libraries(teeworlds.elf
+        switch-updater
+        switch::libnx
+)
+set_target_properties(teeworlds.elf PROPERTIES
+        LINKER_LANGUAGE CXX
+        LINK_FLAGS "-specs=${LIBNX}/switch.specs -Wl,-no-as-needed -Wl,-Map,teeworlds.map")
+
+set(_GAME_APP_TITLE "${APP_TITLE}")
+set(_GAME_APP_AUTHOR "${APP_AUTHOR}")
+set(_GAME_APP_VERSION "${APP_VERSION}")
+set(_GAME_APP_ICON "${APP_ICON}")
+set(APP_TITLE "Teeworlds Updater")
+set(APP_AUTHOR "menzer")
+set(APP_VERSION "${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_PATCH}")
+set(APP_ICON "${CMAKE_CURRENT_SOURCE_DIR}/assets/teeworld.png")
+build_switch_binaries(teeworlds.elf)
+set(APP_TITLE "${_GAME_APP_TITLE}")
+set(APP_AUTHOR "${_GAME_APP_AUTHOR}")
+set(APP_VERSION "${_GAME_APP_VERSION}")
+set(APP_ICON "${_GAME_APP_ICON}")
+add_dependencies(teeworlds.nro game.nro)
 #build_switch_sysmodule(${HOMEBREW_APP}.elf)  # build .kip
 #build_switch_nsp(${HOMEBREW_APP}.elf)  # build .nsp
 endif()

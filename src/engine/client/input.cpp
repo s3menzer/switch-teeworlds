@@ -2,6 +2,10 @@
 /* If you are missing that file, acquire a complete release at teeworlds.com.                */
 #include "SDL.h"
 
+#if defined(__SWITCH__)
+	#include <switch.h>
+#endif
+
 #include <base/system.h>
 #include <engine/shared/config.h>
 #include <engine/console.h>
@@ -50,6 +54,20 @@ CInput::CInput()
 	m_aSelectedJoystickGUID[0] = '\0';
 
 	m_PreviousHat = 0;
+	#if defined(__SWITCH__)
+		m_SwitchLeftStickX = 0;
+		m_SwitchLeftStickY = 0;
+		m_SwitchRightStickX = 0;
+		m_SwitchRightStickY = 0;
+		m_SwitchDpadX = 0;
+		m_SwitchDpadY = 0;
+		m_SwitchMoveDirection = 0;
+		m_SwitchGameControls = false;
+		m_SwitchTouchValid = false;
+		m_SwitchTouchPressed = false;
+		m_SwitchTouchX = 0.0f;
+		m_SwitchTouchY = 0.0f;
+	#endif
 
 	m_MouseDoubleClick = false;
 
@@ -203,6 +221,17 @@ void CInput::MouseRelative(float *x, float *y)
 	float JoystickSens = g_Config.m_JoystickSens/100.0f;
 
 	SDL_GetRelativeMouseState(&nx,&ny);
+	#if defined(__SWITCH__)
+		const int StickX = m_SwitchGameControls ? m_SwitchRightStickX : m_SwitchLeftStickX;
+		const int StickY = m_SwitchGameControls ? m_SwitchRightStickY : m_SwitchLeftStickY;
+		nx += StickX * 16 / 32767;
+		ny -= StickY * 16 / 32767;
+		if(!m_SwitchGameControls)
+		{
+			nx += m_SwitchDpadX;
+			ny += m_SwitchDpadY;
+		}
+	#endif
 
 	vec2 j = vec2(0.0f, 0.0f);
 
@@ -295,6 +324,150 @@ int CInput::Update()
 {
 	// keep the counter between 1..0xFFFF, 0 means not pressed
 	m_InputCounter = (m_InputCounter%0xFFFF)+1;
+	#if defined(__SWITCH__)
+		// Translate the Switch pad to SDL events for menu navigation and the
+		// default Teeworlds actions.
+		static PadState s_Pad;
+		static bool s_PadInitialized = false;
+		static u64 s_PreviousKeys = 0;
+		static bool s_PreviousGameControls = false;
+		static bool s_PreviousTouchPressed = false;
+		if(!s_PadInitialized)
+		{
+			padConfigureInput(1, HidNpadStyleSet_NpadFullCtrl);
+			padInitializeDefault(&s_Pad);
+			s_PadInitialized = true;
+		}
+		static bool s_TouchInitialized = false;
+		if(!s_TouchInitialized)
+		{
+			hidInitializeTouchScreen();
+			s_TouchInitialized = true;
+		}
+		padUpdate(&s_Pad);
+		const u64 Keys = padGetButtons(&s_Pad);
+
+		auto PushMouseButton = [](Uint32 Type, Uint8 Button) {
+			SDL_Event Event;
+			mem_zero(&Event, sizeof(Event));
+			Event.type = Type;
+			Event.button.button = Button;
+			Event.button.state = Type == SDL_MOUSEBUTTONDOWN ? SDL_PRESSED : SDL_RELEASED;
+			Event.button.clicks = 1;
+			SDL_PushEvent(&Event);
+		};
+
+		auto PushKey = [](Uint32 Type, SDL_Keycode Keycode) {
+			SDL_Event Event;
+			mem_zero(&Event, sizeof(Event));
+			Event.type = Type;
+			Event.key.state = Type == SDL_KEYDOWN ? SDL_PRESSED : SDL_RELEASED;
+			Event.key.repeat = 0;
+			Event.key.keysym.sym = Keycode;
+			Event.key.keysym.scancode = SDL_GetScancodeFromKey(Keycode);
+			SDL_PushEvent(&Event);
+		};
+
+		auto PushMouseWheel = [](Sint32 Direction) {
+			SDL_Event Event;
+			mem_zero(&Event, sizeof(Event));
+			Event.type = SDL_MOUSEWHEEL;
+			Event.wheel.y = Direction;
+			SDL_PushEvent(&Event);
+		};
+
+		const bool GameControls = m_SwitchGameControls;
+		const bool PreviousGameControls = s_PreviousGameControls;
+		const bool APressed = (Keys & HidNpadButton_A) != 0;
+		const bool AWasPressed = (s_PreviousKeys & HidNpadButton_A) != 0;
+
+		HidTouchScreenState TouchState;
+		mem_zero(&TouchState, sizeof(TouchState));
+		const bool TouchActive =
+			hidGetTouchScreenStates(&TouchState, 1) > 0 &&
+			TouchState.count > 0;
+		m_SwitchTouchValid = TouchActive;
+		if(TouchActive)
+		{
+			// Switch touch coordinates are reported in the handheld panel's
+			// 1280x720 coordinate space. Convert them to the current render
+			// resolution used by Teeworlds.
+			const float ScreenWidth = m_pGraphics ? m_pGraphics->ScreenWidth() : 1280.0f;
+			const float ScreenHeight = m_pGraphics ? m_pGraphics->ScreenHeight() : 720.0f;
+			m_SwitchTouchX = clamp(
+				TouchState.touches[0].x * ScreenWidth / 1280.0f,
+				0.0f,
+				ScreenWidth);
+			m_SwitchTouchY = clamp(
+				TouchState.touches[0].y * ScreenHeight / 720.0f,
+				0.0f,
+				ScreenHeight);
+		}
+
+		// Touch is a mouse click in menus. While playing, the touch screen
+		// should not fire a weapon accidentally.
+		m_SwitchTouchPressed = TouchActive && !GameControls;
+		if(m_SwitchTouchPressed && !s_PreviousTouchPressed)
+			PushMouseButton(SDL_MOUSEBUTTONDOWN, SDL_BUTTON_LEFT);
+		else if(!m_SwitchTouchPressed && s_PreviousTouchPressed)
+			PushMouseButton(SDL_MOUSEBUTTONUP, SDL_BUTTON_LEFT);
+		s_PreviousTouchPressed = m_SwitchTouchPressed;
+
+		// A is the menu confirm button, but maps to jump while playing.
+		if(AWasPressed && (!APressed || PreviousGameControls != GameControls))
+		{
+			if(PreviousGameControls)
+				PushKey(SDL_KEYUP, SDLK_SPACE);
+			else
+				PushMouseButton(SDL_MOUSEBUTTONUP, SDL_BUTTON_LEFT);
+		}
+		if(APressed && (!AWasPressed || PreviousGameControls != GameControls))
+		{
+			if(GameControls)
+				PushKey(SDL_KEYDOWN, SDLK_SPACE);
+			else
+				PushMouseButton(SDL_MOUSEBUTTONDOWN, SDL_BUTTON_LEFT);
+		}
+
+		auto PushGameMouseButton = [&](u64 Button, Uint8 MouseButton) {
+			const bool Pressed = (Keys & Button) != 0;
+			const bool WasPressed = (s_PreviousKeys & Button) != 0;
+			if(WasPressed && PreviousGameControls && (!Pressed || !GameControls))
+				PushMouseButton(SDL_MOUSEBUTTONUP, MouseButton);
+			if(Pressed && GameControls && (!WasPressed || !PreviousGameControls))
+				PushMouseButton(SDL_MOUSEBUTTONDOWN, MouseButton);
+		};
+		PushGameMouseButton(HidNpadButton_ZL, SDL_BUTTON_RIGHT); // hook
+		PushGameMouseButton(HidNpadButton_ZR, SDL_BUTTON_LEFT); // fire
+
+		if(GameControls && (Keys & HidNpadButton_L) && !(s_PreviousKeys & HidNpadButton_L))
+			PushMouseWheel(1); // previous weapon
+		if(GameControls && (Keys & HidNpadButton_R) && !(s_PreviousKeys & HidNpadButton_R))
+			PushMouseWheel(-1); // next weapon
+
+		const u64 CancelKeys = HidNpadButton_B | HidNpadButton_Plus;
+		if((Keys & CancelKeys) && !(s_PreviousKeys & CancelKeys))
+			PushKey(SDL_KEYDOWN, SDLK_ESCAPE);
+		if(!(Keys & CancelKeys) && (s_PreviousKeys & CancelKeys))
+			PushKey(SDL_KEYUP, SDLK_ESCAPE);
+
+		HidAnalogStickState LeftStick = padGetStickPos(&s_Pad, 0);
+		HidAnalogStickState RightStick = padGetStickPos(&s_Pad, 1);
+		const int Deadzone = 8000;
+		m_SwitchLeftStickX = abs(LeftStick.x) > Deadzone ? LeftStick.x : 0;
+		m_SwitchLeftStickY = abs(LeftStick.y) > Deadzone ? LeftStick.y : 0;
+		m_SwitchRightStickX = abs(RightStick.x) > Deadzone ? RightStick.x : 0;
+		m_SwitchRightStickY = abs(RightStick.y) > Deadzone ? RightStick.y : 0;
+		m_SwitchMoveDirection = m_SwitchLeftStickX < -Deadzone ? -1 : m_SwitchLeftStickX > Deadzone ? 1 : 0;
+		m_SwitchDpadX = 0;
+		m_SwitchDpadY = 0;
+		if(Keys & HidNpadButton_Left) m_SwitchDpadX -= 12;
+		if(Keys & HidNpadButton_Right) m_SwitchDpadX += 12;
+		if(Keys & HidNpadButton_Up) m_SwitchDpadY -= 12;
+		if(Keys & HidNpadButton_Down) m_SwitchDpadY += 12;
+		s_PreviousGameControls = GameControls;
+		s_PreviousKeys = Keys;
+	#endif
 
 	{
 		int i;
@@ -315,6 +488,10 @@ int CInput::Update()
 	if(i&SDL_BUTTON(7)) m_aInputState[KEY_MOUSE_7] = 1;
 	if(i&SDL_BUTTON(8)) m_aInputState[KEY_MOUSE_8] = 1;
 	if(i&SDL_BUTTON(9)) m_aInputState[KEY_MOUSE_9] = 1;
+#if defined(__SWITCH__)
+	if(m_SwitchTouchPressed)
+		m_aInputState[KEY_MOUSE_1] = 1;
+#endif
 
 	{
 		SDL_Event Event;
@@ -456,6 +633,8 @@ int CInput::Update()
 					m_aInputState[Scancode] = 1;
 					m_aInputCount[Key] = m_InputCounter;
 				}
+				else if(Action&IInput::FLAG_RELEASE)
+					m_aInputState[Scancode] = 0;
 				AddEvent(0, Key, Action);
 			}
 

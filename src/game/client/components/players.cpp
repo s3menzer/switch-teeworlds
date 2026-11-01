@@ -425,7 +425,11 @@ void CPlayers::RenderPlayer(
 
 	}
 
-	// render the "shadow" tee
+	// Render the prediction debug "shadow" tee on desktop builds. On Switch,
+	// debug=1 is also used to enable updater diagnostics, so drawing the
+	// network-interpolated character in addition to the predicted character
+	// makes the local player appear twice while moving.
+#if !defined(__SWITCH__)
 	if(m_pClient->m_LocalClientID == ClientID && g_Config.m_Debug)
 	{
 		vec2 GhostPosition = mix(vec2(pPrevChar->m_X, pPrevChar->m_Y), vec2(pPlayerChar->m_X, pPlayerChar->m_Y), Client()->IntraGameTick());
@@ -434,6 +438,7 @@ void CPlayers::RenderPlayer(
 			Ghost.m_aColors[p].a *= 0.5f;
 		RenderTools()->RenderTee(&State, &Ghost, Player.m_Emote, Direction, GhostPosition); // render ghost
 	}
+#endif
 
 	RenderTools()->RenderTee(&State, &RenderInfo, Player.m_Emote, Direction, Position);
 

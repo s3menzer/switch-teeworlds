@@ -38,17 +38,35 @@ public:
 	int Init(const char *pApplicationName, int StorageType, int NumArgs, const char **ppArguments)
 	{
 		// get userdir
+#if defined(__SWITCH__)
+		m_aUserDir[0] = 0;
+#else
 		fs_storage_path(pApplicationName, m_aUserDir, sizeof(m_aUserDir));
+#endif
 		
 		// get appdir
+#if !defined(__SWITCH__)
 		FindAppDir(ppArguments[0]);
-
-		// get datadir
-		FindDataDir();
+#endif
 
 		// get currentdir
 		if(!fs_getcwd(m_aCurrentDir, sizeof(m_aCurrentDir)))
 			m_aCurrentDir[0] = 0;
+
+#if defined(__SWITCH__)
+		/*
+			Switch does not provide a normal HOME directory. Use the
+			current working directory for all writable/application paths.
+			The data directory remains the "data" subdirectory below it.
+			Relative paths also avoid depending on a particular sdmc path.
+		*/
+		str_copy(m_aUserDir, ".", sizeof(m_aUserDir));
+		str_copy(m_aCurrentDir, ".", sizeof(m_aCurrentDir));
+		str_copy(m_aAppDir, ".", sizeof(m_aAppDir));
+#endif
+
+		// get datadir
+		FindDataDir();
 
 		// load paths from storage.cfg
 		LoadPaths();
@@ -233,6 +251,22 @@ public:
 
 	void FindDataDir()
 	{
+	#if defined(__SWITCH__)
+		// elf2nro places the contents of --romfsdir at the RomFS root.
+		// Static assets are therefore available as romfs:/mapres, etc.
+		if(fs_is_dir("romfs:/mapres"))
+		{
+			str_copy(m_aDataDir, "romfs:", sizeof(m_aDataDir));
+			return;
+		}
+		// Also accept a RomFS containing an explicit data/ directory.
+		if(fs_is_dir("romfs:/data/mapres"))
+		{
+			str_copy(m_aDataDir, "romfs:/data", sizeof(m_aDataDir));
+			return;
+		}
+	#endif
+
 		// 1) use data-dir in PWD if present
 		if(fs_is_dir("data/mapres"))
 		{

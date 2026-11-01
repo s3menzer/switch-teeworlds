@@ -20,7 +20,10 @@ find_path(FREETYPE_INCLUDEDIR
 )
 
 include(FindPackageHandleStandardArgs)
-find_package_handle_standard_args(Freetype DEFAULT_MSG FREETYPE_LIBRARY FREETYPE_INCLUDEDIR)
+find_package_handle_standard_args(OwnFreetype DEFAULT_MSG FREETYPE_LIBRARY FREETYPE_INCLUDEDIR)
+
+# Keep the variable names used by the rest of the project.
+set(FREETYPE_FOUND ${OwnFreetype_FOUND})
 
 mark_as_advanced(FREETYPE_LIBRARY FREETYPE_INCLUDEDIR)
 

@@ -2,6 +2,11 @@
 /* If you are missing that file, acquire a complete release at teeworlds.com.                */
 #include <math.h>
 
+#if defined(__SWITCH__)
+	#include <switch.h>
+	#include <vector>
+#endif
+
 #include <base/system.h>
 #include <base/math.h>
 #include <base/vmath.h>
@@ -36,6 +41,47 @@
 float CMenus::ms_ButtonHeight = 25.0f;
 float CMenus::ms_ListheaderHeight = 17.0f;
 float CMenus::ms_FontmodHeight = 0.8f;
+
+#if defined(__SWITCH__)
+namespace
+{
+	bool SwitchShowTextInput(char *pStr, unsigned StrSize, bool Hidden)
+	{
+		if(StrSize == 0)
+			return false;
+
+		SwkbdConfig Config;
+		const Result CreateResult = swkbdCreate(&Config, 0);
+		if(R_FAILED(CreateResult))
+			return false;
+
+		if(Hidden)
+			swkbdConfigMakePresetPassword(&Config);
+		else
+			swkbdConfigMakePresetDefault(&Config);
+
+		swkbdConfigSetInitialText(&Config, pStr);
+		swkbdConfigSetStringLenMax(&Config, StrSize - 1);
+
+		// Keep the current value intact when the keyboard is cancelled. The
+		// software keyboard writes its result into the supplied buffer.
+		std::vector<char> Output(StrSize);
+		mem_copy(Output.data(), pStr, StrSize);
+
+		const Result ShowResult = swkbdShow(&Config, Output.data(), Output.size());
+		swkbdClose(&Config);
+
+		if(R_SUCCEEDED(ShowResult))
+		{
+			const bool Changed = str_comp(pStr, Output.data()) != 0;
+			str_copy(pStr, Output.data(), StrSize);
+			return Changed;
+		}
+
+		return false;
+	}
+}
+#endif
 
 
 CMenus::CMenus()
@@ -544,6 +590,26 @@ bool CMenus::DoEditBox(void *pID, const CUIRect *pRect, char *pStr, unsigned Str
 
 	if(Inside)
 		UI()->SetHotItem(pID);
+
+	#if defined(__SWITCH__)
+	if(JustGotActive)
+	{
+		// The keyboard is a separate Switch applet. Release SDL's relative
+		// mouse mode before entering it and discard the button event that
+		// opened the keyboard when it returns.
+		Input()->MouseModeAbsolute();
+		Changed |= SwitchShowTextInput(pStr, StrSize, Hidden);
+		Input()->Clear();
+
+		// swkbdShow is modal. Do not leave the edit box as the active UI item
+		// after the applet returns, otherwise the menu can remain stuck in its
+		// pressed/focused state until another mouse event arrives.
+		s_DoScroll = false;
+		UI()->SetActiveItem(0);
+		UI()->ClearLastActiveItem();
+		Input()->MouseModeRelative();
+	}
+	#endif
 
 	CUIRect Textbox = *pRect;
 	vec4 Color;
@@ -1306,6 +1372,16 @@ void CMenus::RenderMenubar(CUIRect Rect)
 		float ButtonWidth = (Box.w/6.0f)-(Spacing*5.0)/6.0f;
 		float NotActiveAlpha = Client()->State() == IClient::STATE_ONLINE ? 0.5f : 1.0f;
 		int Corners = Client()->State() == IClient::STATE_ONLINE ? CUI::CORNER_T : CUI::CORNER_ALL;
+		auto ChangeSettingsPage = [this](int CameraPosition, int SettingsPage) {
+			// Do not carry an edit box's active state into another settings
+			// page. On Switch that could reopen the modal keyboard and make
+			// input appear frozen.
+			UI()->SetActiveItem(0);
+			UI()->ClearLastActiveItem();
+			UI()->SetHotItem(0);
+			m_pClient->m_pCamera->ChangePosition(CameraPosition);
+			g_Config.m_UiSettingsPage = SettingsPage;
+		};
 
 		// render header background
 		if(Client()->State() == IClient::STATE_OFFLINE)
@@ -1317,10 +1393,7 @@ void CMenus::RenderMenubar(CUIRect Rect)
 		static CButtonContainer s_GeneralButton;
 		if(DoButton_MenuTabTop(&s_GeneralButton, Localize("General"), Client()->State() == IClient::STATE_OFFLINE && g_Config.m_UiSettingsPage==SETTINGS_GENERAL, &Button,
 			g_Config.m_UiSettingsPage == SETTINGS_GENERAL ? 1.0f : NotActiveAlpha, 1.0f, Corners))
-		{
-			m_pClient->m_pCamera->ChangePosition(CCamera::POS_SETTINGS_GENERAL);
-			g_Config.m_UiSettingsPage = SETTINGS_GENERAL;
-		}
+			ChangeSettingsPage(CCamera::POS_SETTINGS_GENERAL, SETTINGS_GENERAL);
 
 		Box.VSplitLeft(Spacing, 0, &Box); // little space
 		Box.VSplitLeft(ButtonWidth, &Button, &Box);
@@ -1328,10 +1401,7 @@ void CMenus::RenderMenubar(CUIRect Rect)
 			static CButtonContainer s_PlayerButton;
 			if(DoButton_MenuTabTop(&s_PlayerButton, Localize("Player"), Client()->State() == IClient::STATE_OFFLINE && g_Config.m_UiSettingsPage == SETTINGS_PLAYER, &Button,
 				g_Config.m_UiSettingsPage == SETTINGS_PLAYER ? 1.0f : NotActiveAlpha, 1.0f, Corners))
-			{
-				m_pClient->m_pCamera->ChangePosition(CCamera::POS_SETTINGS_PLAYER);
-				g_Config.m_UiSettingsPage = SETTINGS_PLAYER;
-			}
+				ChangeSettingsPage(CCamera::POS_SETTINGS_PLAYER, SETTINGS_PLAYER);
 		}
 
 		Box.VSplitLeft(Spacing, 0, &Box); // little space
@@ -1340,10 +1410,7 @@ void CMenus::RenderMenubar(CUIRect Rect)
 			static CButtonContainer s_TeeButton;
 			if(DoButton_MenuTabTop(&s_TeeButton, Localize("Tee"), Client()->State() == IClient::STATE_OFFLINE && g_Config.m_UiSettingsPage == SETTINGS_TEE, &Button,
 				g_Config.m_UiSettingsPage == SETTINGS_TEE ? 1.0f : NotActiveAlpha, 1.0f, Corners))
-			{
-				m_pClient->m_pCamera->ChangePosition(CCamera::POS_SETTINGS_TEE);
-				g_Config.m_UiSettingsPage = SETTINGS_TEE;
-			}
+				ChangeSettingsPage(CCamera::POS_SETTINGS_TEE, SETTINGS_TEE);
 		}
 
 
@@ -1352,30 +1419,21 @@ void CMenus::RenderMenubar(CUIRect Rect)
 		static CButtonContainer s_ControlsButton;
 		if(DoButton_MenuTabTop(&s_ControlsButton, Localize("Controls"), Client()->State() == IClient::STATE_OFFLINE && g_Config.m_UiSettingsPage==SETTINGS_CONTROLS, &Button,
 			g_Config.m_UiSettingsPage == SETTINGS_CONTROLS ? 1.0f : NotActiveAlpha, 1.0f, Corners))
-		{
-			m_pClient->m_pCamera->ChangePosition(CCamera::POS_SETTINGS_CONTROLS);
-			g_Config.m_UiSettingsPage = SETTINGS_CONTROLS;
-		}
+			ChangeSettingsPage(CCamera::POS_SETTINGS_CONTROLS, SETTINGS_CONTROLS);
 
 		Box.VSplitLeft(Spacing, 0, &Box); // little space
 		Box.VSplitLeft(ButtonWidth, &Button, &Box);
 		static CButtonContainer s_GraphicsButton;
 		if(DoButton_MenuTabTop(&s_GraphicsButton, Localize("Graphics"), Client()->State() == IClient::STATE_OFFLINE && g_Config.m_UiSettingsPage==SETTINGS_GRAPHICS, &Button,
 			g_Config.m_UiSettingsPage == SETTINGS_GRAPHICS ? 1.0f : NotActiveAlpha, 1.0f, Corners))
-		{
-			m_pClient->m_pCamera->ChangePosition(CCamera::POS_SETTINGS_GRAPHICS);
-			g_Config.m_UiSettingsPage = SETTINGS_GRAPHICS;
-		}
+			ChangeSettingsPage(CCamera::POS_SETTINGS_GRAPHICS, SETTINGS_GRAPHICS);
 
 		Box.VSplitLeft(Spacing, 0, &Box); // little space
 		Box.VSplitLeft(ButtonWidth, &Button, &Box);
 		static CButtonContainer s_SoundButton;
 		if(DoButton_MenuTabTop(&s_SoundButton, Localize("Sound"), Client()->State() == IClient::STATE_OFFLINE && g_Config.m_UiSettingsPage==SETTINGS_SOUND, &Button,
 			g_Config.m_UiSettingsPage == SETTINGS_SOUND ? 1.0f : NotActiveAlpha, 1.0f, Corners))
-		{
-			m_pClient->m_pCamera->ChangePosition(CCamera::POS_SETTINGS_SOUND);
-			g_Config.m_UiSettingsPage = SETTINGS_SOUND;
-		}
+			ChangeSettingsPage(CCamera::POS_SETTINGS_SOUND, SETTINGS_SOUND);
 	}
 	else if((Client()->State() == IClient::STATE_OFFLINE && m_MenuPage >= PAGE_INTERNET && m_MenuPage <= PAGE_LAN) || (Client()->State() == IClient::STATE_ONLINE && m_GamePage >= PAGE_INTERNET && m_GamePage <= PAGE_LAN))
 	{
@@ -1452,6 +1510,13 @@ void CMenus::RenderMenubar(CUIRect Rect)
 			SetMenuPage(NewPage);
 		else
 		{
+			// A page switch must also release any control that was active on
+			// the previous page. This is especially important on Switch,
+			// where the page can be changed by a synthetic mouse event from
+			// the controller and no physical mouse-up event follows it.
+			UI()->SetActiveItem(0);
+			UI()->ClearLastActiveItem();
+			UI()->SetHotItem(0);
 			m_GamePage = NewPage;
 			if(NewPage == PAGE_INTERNET || NewPage == PAGE_LAN)
 				SetMenuPage(NewPage);
@@ -1858,7 +1923,7 @@ int CMenus::Render()
 					if(DoButton_MenuTabTop(&s_SettingsButton, "\xE2\x9A\x99", false, &Button, 1.0f, 1.0f, CUI::CORNER_B))
 					{
 						m_MenuPageOld = m_MenuPage;
-						m_MenuPage = PAGE_SETTINGS;
+						SetMenuPage(PAGE_SETTINGS);
 					}
 				}
 				Row.VSplitRight(5.0f, &Row, 0);
@@ -2741,6 +2806,16 @@ void CMenus::OnRender()
 		return;
 	}
 
+#if defined(__SWITCH__)
+	float TouchX;
+	float TouchY;
+	if(Input()->SwitchTouchPosition(&TouchX, &TouchY))
+	{
+		m_MousePos.x = TouchX;
+		m_MousePos.y = TouchY;
+	}
+#endif
+
 	// update the ui
 	CUIRect *pScreen = UI()->Screen();
 	float mx = (m_MousePos.x/(float)Graphics()->ScreenWidth())*pScreen->w;
@@ -2877,6 +2952,16 @@ void CMenus::SetMenuPage(int NewPage)
 {
 	if(NewPage == m_MenuPage)
 		return;
+
+	// Do not carry an active slider, edit box, or button into another page.
+	// On Switch this can otherwise leave the UI waiting for a release event
+	// that was consumed while changing pages.
+	if(m_pClient)
+	{
+		UI()->SetActiveItem(0);
+		UI()->ClearLastActiveItem();
+		UI()->SetHotItem(0);
+	}
 
 	m_MenuPage = NewPage;
 

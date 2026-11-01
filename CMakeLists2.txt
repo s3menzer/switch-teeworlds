@@ -1,24 +1,5 @@
-cmake_minimum_required(VERSION 2.8)
-
-file(STRINGS src/game/version.h VERSION_LINE
-  LIMIT_COUNT 1
-  REGEX GAME_RELEASE_VERSION
-)
-
-if(VERSION_LINE MATCHES "\"([0-9]+)\\.([0-9]+)\\.([0-9]+|[0-9]+\\.[0-9]+)\"")
-  set(VERSION_MAJOR ${CMAKE_MATCH_1})
-  set(VERSION_MINOR ${CMAKE_MATCH_2})
-  set(VERSION_PATCH ${CMAKE_MATCH_3})
-elseif(VERSION_LINE MATCHES "\"([0-9]+)\\.([0-9]+)\"")
-  set(VERSION_MAJOR ${CMAKE_MATCH_1})
-  set(VERSION_MINOR ${CMAKE_MATCH_2})
-  set(VERSION_PATCH "0")
-else()
-  message(FATAL_ERROR "Couldn't parse version from src/game/version.h")
-endif()
-
 if(POLICY CMP0072)
-  cmake_policy(SET CMP0072 OLD)
+  cmake_policy(SET CMP0072 NEW)
 endif()
 
 if(POLICY CMP0091)
@@ -27,17 +8,6 @@ endif()
 
 if(POLICY CMP0092)
   cmake_policy(SET CMP0092 NEW)
-endif()
-
-if(POLICY CMP0048)
-  cmake_policy(SET CMP0048 NEW)
-  project(teeworlds VERSION ${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_PATCH})
-else()
-  project(teeworlds)
-  set(PROJECT_VERSION_MAJOR ${VERSION_MAJOR})
-  set(PROJECT_VERSION_MINOR ${VERSION_MINOR})
-  set(PROJECT_VERSION_PATCH ${VERSION_PATCH})
-  set(PROJECT_VERSION ${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_PATCH})
 endif()
 
 set(ORIGINAL_CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH})
@@ -100,13 +70,23 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
 )
 
 set(SERVER_EXECUTABLE teeworlds_srv CACHE STRING "Name of the built server executable")
-set(CLIENT_EXECUTABLE ${HOMEBREW_APP}.elf CACHE STRING "Name of the build client executable")
+if(SWITCH)
+  set(CLIENT_EXECUTABLE ${HOMEBREW_APP}.elf CACHE STRING "Name of the build client executable" FORCE)
+else()
+  set(CLIENT_EXECUTABLE ${HOMEBREW_APP}.elf CACHE STRING "Name of the build client executable")
+endif()
 
 ########################################################################
 # Download dependencies
 ########################################################################
 
-find_package(PythonInterp)
+find_package(Python3 COMPONENTS Interpreter QUIET)
+if(Python3_Interpreter_FOUND)
+  set(PYTHON_EXECUTABLE "${Python3_EXECUTABLE}")
+  set(PYTHONINTERP_FOUND TRUE)
+else()
+  set(PYTHONINTERP_FOUND FALSE)
+endif()
 if(DOWNLOAD_DEPENDENCIES)
   if(PYTHON_EXECUTABLE AND TARGET_OS STREQUAL "windows" AND TARGET_BITS)
     set(DOWNLOADS)
@@ -117,9 +97,14 @@ if(DOWNLOAD_DEPENDENCIES)
     endforeach()
     if(DOWNLOADS)
       message(STATUS "Downloading Freetype and SDL 2")
-      execute_process(COMMAND ${PYTHON_EXECUTABLE} scripts/download.py ${DOWNLOADS}
+      execute_process(
+        COMMAND ${PYTHON_EXECUTABLE} scripts/download.py ${DOWNLOADS}
         WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+        RESULT_VARIABLE DOWNLOAD_RESULT
       )
+      if(NOT DOWNLOAD_RESULT EQUAL 0)
+        message(FATAL_ERROR "Failed to download Windows build dependencies")
+      endif()
     endif()
   endif()
 endif()
@@ -146,15 +131,18 @@ function(add_c_compiler_flag_if_supported VARIABLE FLAG)
 endfunction()
 
 if(NOT MSVC)
-  # Protect the stack pointer.
-  # -fstack-protector-all doesn't work on MinGW.
-  add_c_compiler_flag_if_supported(OUR_FLAGS -fstack-protector-strong)
+  # The GCC hardening runtime used by these options is not available in the
+  # MinGW toolchain used by the Windows cross-build.
+  if(NOT MINGW)
+    # Protect the stack pointer.
+    add_c_compiler_flag_if_supported(OUR_FLAGS -fstack-protector-strong)
 
-  # Protect the stack from clashing.
-  add_c_compiler_flag_if_supported(OUR_FLAGS -fstack-clash-protection)
+    # Protect the stack from clashing.
+    add_c_compiler_flag_if_supported(OUR_FLAGS -fstack-clash-protection)
 
-  # Control-flow protection. Should protect against ROP.
-  add_c_compiler_flag_if_supported(OUR_FLAGS -fcf-protection)
+    # Control-flow protection. Should protect against ROP.
+    add_c_compiler_flag_if_supported(OUR_FLAGS -fcf-protection)
+  endif()
 
   # Inaccurate floating point numbers cause problems on mingw-w64-gcc when
   # compiling for x86, might cause problems elsewhere. So don't store floats
@@ -308,6 +296,39 @@ if(NOT CMAKE_CROSSCOMPILING)
   find_package(PkgConfig)
 endif()
 find_package(ZLIB)
+if(TARGET_OS STREQUAL "windows")
+  # Build the bundled zlib sources directly instead of requiring the old
+  # thirdParty/zlib.tar.gz archive. The source tree already contains all
+  # files needed for a static Windows build and is available in a clean CI
+  # checkout.
+  set(TEEWORLDS_ZLIB_SOURCE_DIR "${PROJECT_SOURCE_DIR}/src/engine/external/zlib")
+
+  if(NOT EXISTS "${TEEWORLDS_ZLIB_SOURCE_DIR}/zlib.h" OR
+     NOT EXISTS "${TEEWORLDS_ZLIB_SOURCE_DIR}/zconf.h")
+    message(FATAL_ERROR "Bundled zlib sources not found: ${TEEWORLDS_ZLIB_SOURCE_DIR}")
+  endif()
+
+  add_library(teeworlds-zlib STATIC
+    "${TEEWORLDS_ZLIB_SOURCE_DIR}/adler32.c"
+    "${TEEWORLDS_ZLIB_SOURCE_DIR}/compress.c"
+    "${TEEWORLDS_ZLIB_SOURCE_DIR}/crc32.c"
+    "${TEEWORLDS_ZLIB_SOURCE_DIR}/deflate.c"
+    "${TEEWORLDS_ZLIB_SOURCE_DIR}/inflate.c"
+    "${TEEWORLDS_ZLIB_SOURCE_DIR}/infback.c"
+    "${TEEWORLDS_ZLIB_SOURCE_DIR}/inftrees.c"
+    "${TEEWORLDS_ZLIB_SOURCE_DIR}/inffast.c"
+    "${TEEWORLDS_ZLIB_SOURCE_DIR}/trees.c"
+    "${TEEWORLDS_ZLIB_SOURCE_DIR}/uncompr.c"
+    "${TEEWORLDS_ZLIB_SOURCE_DIR}/zutil.c"
+  )
+  target_include_directories(teeworlds-zlib PUBLIC "${TEEWORLDS_ZLIB_SOURCE_DIR}")
+  list(APPEND TARGETS_DEP teeworlds-zlib)
+  set(ZLIB_FOUND ON)
+  set(ZLIB_BUNDLED ON)
+  set(ZLIB_INCLUDE_DIRS "${TEEWORLDS_ZLIB_SOURCE_DIR}")
+  set(ZLIB_LIBRARIES teeworlds-zlib)
+  set(ZLIB_DEP)
+endif()
 find_package(Crypto)
 find_package(OwnFreetype)
 find_package(Git)
@@ -1510,13 +1531,20 @@ if(CLIENT)
     src/generated/client_data.h
   )
   set(CLIENT_SRC ${PLATFORM_CLIENT} ${ENGINE_CLIENT} ${GAME_CLIENT} ${GAME_EDITOR} ${GAME_GENERATED_CLIENT})
+  if(SWITCH)
+    add_subdirectory(src/updater)
+  endif()
 
   set(DEPS_CLIENT ${DEPS} ${PNGLITE_DEP} ${WAVPACK_DEP})
 
   # Libraries
+  if(SWITCH)
+    find_library(HARFBUZZ_LIBRARY harfbuzz PATHS ${PORTLIBS}/lib NO_DEFAULT_PATH)
+  endif()
   set(LIBS_CLIENT
     ${LIBS}
     ${FREETYPE_LIBRARIES}
+    ${HARFBUZZ_LIBRARY}
     ${PNGLITE_LIBRARIES}
     ${SDL2_LIBRARIES}
     ${WAVPACK_LIBRARIES}
@@ -1524,11 +1552,12 @@ if(CLIENT)
   )
 
   if(TARGET_OS STREQUAL "windows")
-    set(CLIENT_ICON "other/icons/${CLIENT_EXECUTABLE}.rc")
-    if(NOT MINGW)
-      set(CLIENT_MANIFEST "other/manifest/teeworlds.manifest")
-    else()
+    if(MINGW)
+      set(CLIENT_ICON "other/icons/teeworlds_gcc.rc")
       set(CLIENT_MANIFEST "other/manifest/teeworlds.rc")
+    else()
+      set(CLIENT_ICON "other/icons/${CLIENT_EXECUTABLE}.rc")
+      set(CLIENT_MANIFEST "other/manifest/teeworlds.manifest")
     endif()
   else()
     set(CLIENT_ICON)
@@ -1544,6 +1573,9 @@ if(CLIENT)
     $<TARGET_OBJECTS:engine-shared>
     $<TARGET_OBJECTS:game-shared>
   )
+  if(TARGET_OS STREQUAL "windows")
+    target_compile_definitions(${TARGET_CLIENT} PRIVATE SDL_MAIN_HANDLED)
+  endif()
   target_link_libraries(${TARGET_CLIENT} ${LIBS_CLIENT})
 
   target_include_directories(${TARGET_CLIENT} PRIVATE
@@ -2069,7 +2101,7 @@ foreach(target ${TARGETS})
   if(OUR_FLAGS)
     target_compile_options(${target} PRIVATE ${OUR_FLAGS})
   endif()
-  if(DEFINE_FORTIFY_SOURCE)
+  if(DEFINE_FORTIFY_SOURCE AND NOT MINGW)
     target_compile_definitions(${target} PRIVATE $<$<NOT:$<CONFIG:Debug>>:_FORTIFY_SOURCE=2>) # Detect some buffer overflows.
   endif()
   target_compile_definitions(${target} PRIVATE _GLIBCXX_ASSERTIONS) # Enable run-time bounds-checking for the STL

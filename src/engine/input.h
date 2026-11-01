@@ -68,6 +68,12 @@ public:
 	virtual int GetJoystickNumAxes() = 0;
 	virtual float GetJoystickAxisValue(int Axis) = 0;
 
+#if defined(__SWITCH__)
+	virtual int SwitchMoveDirection() const { return 0; }
+	virtual void SwitchSetGameControls(bool) {}
+	virtual bool SwitchTouchPosition(float *, float *) const { return false; }
+#endif
+
 	// mouse
 	virtual void MouseModeRelative() = 0;
 	virtual void MouseModeAbsolute() = 0;

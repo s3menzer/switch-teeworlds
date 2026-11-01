@@ -9,19 +9,19 @@ find_path(BZ2_INCLUDE_DIR bzlib.h
         PATH_SUFFIXES include)
 
 find_library(BZ2_LIBRARY NAMES libbz2.a
-        PATHS BZ2_PATHS
+        PATHS ${BZ2_PATHS}
         PATH_SUFFIXES lib)
 
 set(BZ2_INCLUDE_DIRS ${BZ2_INCLUDE_DIR})
 set(BZ2_LIBRARIES ${BZ2_LIBRARY})
 
-# Handle the QUIETLY and REQUIRED arguments and set BZ2_FOUND to TRUE if all above variables are TRUE.
+# Handle the QUIETLY and REQUIRED arguments and set Bz2_FOUND to TRUE if all above variables are TRUE.
 include(FindPackageHandleStandardArgs)
-find_package_handle_standard_args(BZ2 DEFAULT_MSG
+find_package_handle_standard_args(Bz2 DEFAULT_MSG
         BZ2_INCLUDE_DIR BZ2_LIBRARY)
 
 mark_as_advanced(BZ2_INCLUDE_DIR BZ2_LIBRARY)
-if (BZ2_FOUND)
+if (Bz2_FOUND)
     set(BZ2 ${BZ2_INCLUDE_DIR}/..)
     cmake_info("Setting BZ2 to ${BZ2}")
 

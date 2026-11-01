@@ -1,0 +1,120 @@
+Using container engine: docker
+Using image: docker.io/devkitpro/devkita64:latest
+Using project: /data/projects/teeworlds-switch
+Emulate Docker CLI using podman. Create /etc/containers/nodocker to quiet msg.
+Installing switch-harfbuzz in the container...
+warning: switch-harfbuzz-10.0.1-1 is up to date -- skipping
+ there is nothing to do
+Incremented Teeworlds Switch build number: 64 -> 65
+CMake Warning (dev) in CMakeLists.txt:
+  No project() command is present.  The top-level CMakeLists.txt file must
+  contain a literal, direct call to the project() command.  Add a line of
+  code such as
+
+    project(ProjectName)
+
+  near the top of the file, but after cmake_minimum_required().
+
+  CMake is pretending there is a "project(Project)" command on the first
+  line.
+This warning is for project developers.  Use -Wno-dev to suppress it.
+
+CMake Warning (dev) in CMakeLists.txt:
+  cmake_minimum_required() should be called prior to this top-level project()
+  call.  Please see the cmake-commands(7) manual for usage documentation of
+  both commands.
+This warning is for project developers.  Use -Wno-dev to suppress it.
+
+CMake Deprecation Warning at CMakeLists.txt:12 (cmake_minimum_required):
+  Compatibility with CMake < 3.10 will be removed from a future version of
+  CMake.
+
+  Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+  to tell CMake that the project requires at least <min> but has been updated
+  to work with policies introduced by <max> or earlier.
+
+
+CMake Deprecation Warning at CMakeLists2.txt:1 (cmake_minimum_required):
+  Compatibility with CMake < 3.10 will be removed from a future version of
+  CMake.
+
+  Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+  to tell CMake that the project requires at least <min> but has been updated
+  to work with policies introduced by <max> or earlier.
+Call Stack (most recent call first):
+  CMakeLists.txt:78 (include)
+
+
+CMake Deprecation Warning at CMakeLists2.txt:21 (cmake_policy):
+  The OLD behavior for policy CMP0072 will be removed from a future version
+  of CMake.
+
+  The cmake-policies(7) manual explains that the OLD behaviors of all
+  policies are deprecated and that a policy should be set to OLD only under
+  specific short-term circumstances.  Projects should be ported to the NEW
+  behavior and not rely on setting a policy to OLD.
+Call Stack (most recent call first):
+  CMakeLists.txt:78 (include)
+
+
+CMake Warning (dev) at CMakeLists2.txt:113 (find_package):
+  Policy CMP0148 is not set: The FindPythonInterp and FindPythonLibs modules
+  are removed.  Run "cmake --help-policy CMP0148" for policy details.  Use
+  the cmake_policy command to set the policy and suppress this warning.
+
+Call Stack (most recent call first):
+  CMakeLists.txt:78 (include)
+This warning is for project developers.  Use -Wno-dev to suppress it.
+
+-- Could NOT find Crypto (missing: CRYPTO_LIBRARY CRYPTO_INCLUDEDIR) 
+CMake Warning (dev) at /usr/share/cmake-3.31/Modules/FindPackageHandleStandardArgs.cmake:441 (message):
+  The package name passed to `find_package_handle_standard_args` (Freetype)
+  does not match the name of the calling package (OwnFreetype).  This can
+  lead to problems in calling code that expects `find_package` result
+  variables (e.g., `_FOUND`) to follow a certain pattern.
+Call Stack (most recent call first):
+  cmake/FindOwnFreetype.cmake:23 (find_package_handle_standard_args)
+  CMakeLists2.txt:367 (find_package)
+  CMakeLists.txt:78 (include)
+This warning is for project developers.  Use -Wno-dev to suppress it.
+
+-- Could NOT find GTest (missing: GTEST_LIBRARY GTEST_INCLUDE_DIR GTEST_MAIN_LIBRARY) 
+-- ******** Teeworlds ********
+-- Target OS:  64bit
+-- Compiler: /opt/devkitpro/devkitA64/bin/aarch64-none-elf-g++
+-- Build type: Release
+-- Dependencies:
+--  * Freetype found
+--  * OpenSSL Crypto not found
+--  * Pnglite not found (using bundled version)
+--  * PythonInterp found
+--  * SDL2 found
+--  * Wavpack not found (using bundled version)
+--  * Zlib found
+-- To run the tests, you have to install GTest
+CMake Deprecation Warning at src/updater/CMakeLists.txt:1 (cmake_minimum_required):
+  Compatibility with CMake < 3.10 will be removed from a future version of
+  CMake.
+
+  Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+  to tell CMake that the project requires at least <min> but has been updated
+  to work with policies introduced by <max> or earlier.
+
+
+-- Configuring done (0.1s)
+-- Generating done (0.1s)
+-- Build files have been written to: /workspace/build-switch
+[  4%] Built target switch-updater
+[ 10%] Built target game-shared
+[ 12%] Built target teeworlds.elf
+[ 13%] Built target pnglite
+[ 18%] Built target wavpack
+[ 18%] Built target json
+[ 18%] Built target md5
+[ 48%] Built target engine-shared
+[ 97%] Built target game.elf
+[ 98%] Built target game.nro
+[100%] Built target teeworlds.nro
+Generated update manifest:
+  /workspace/manifests.json
+  manifest URL: http://192.168.22.7/switch/teeworlds/manifests.json

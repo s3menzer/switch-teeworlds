@@ -397,6 +397,10 @@ void CGameClient::OnInit()
 
 void CGameClient::OnUpdate()
 {
+#if defined(__SWITCH__)
+	Input()->SwitchSetGameControls(!m_pMenus->IsActive());
+#endif
+
 	// handle mouse movement
 	float x = 0.0f, y = 0.0f;
 	Input()->MouseRelative(&x, &y);

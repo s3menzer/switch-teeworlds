@@ -21,6 +21,20 @@ class CInput : public IEngineInput
 	char *m_pClipboardText;
 
 	int m_PreviousHat;
+	#if defined(__SWITCH__)
+	int m_SwitchLeftStickX;
+	int m_SwitchLeftStickY;
+	int m_SwitchRightStickX;
+	int m_SwitchRightStickY;
+	int m_SwitchDpadX;
+	int m_SwitchDpadY;
+	int m_SwitchMoveDirection;
+	bool m_SwitchGameControls;
+	bool m_SwitchTouchValid;
+	bool m_SwitchTouchPressed;
+	float m_SwitchTouchX;
+	float m_SwitchTouchY;
+	#endif
 
 	bool m_MouseDoubleClick;
 
@@ -53,6 +67,21 @@ public:
 	const char* GetJoystickName();
 	int GetJoystickNumAxes();
 	float GetJoystickAxisValue(int Axis);
+
+#if defined(__SWITCH__)
+	int SwitchMoveDirection() const override { return m_SwitchMoveDirection; }
+	void SwitchSetGameControls(bool GameControls) override { m_SwitchGameControls = GameControls; }
+	bool SwitchTouchPosition(float *pX, float *pY) const override
+	{
+		if(!m_SwitchTouchValid)
+			return false;
+		if(pX)
+			*pX = m_SwitchTouchX;
+		if(pY)
+			*pY = m_SwitchTouchY;
+		return true;
+	}
+#endif
 
 	virtual void MouseRelative(float *x, float *y);
 	virtual void MouseModeAbsolute();

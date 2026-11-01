@@ -1,0 +1,23 @@
+FROM debian:bookworm-slim
+
+RUN dpkg --add-architecture arm64 \
+	&& apt-get update \
+	&& apt-get install --no-install-recommends -y \
+		ca-certificates \
+		cmake \
+		file \
+		g++-aarch64-linux-gnu \
+		git \
+		libfreetype6-dev:arm64 \
+		libsdl2-dev:arm64 \
+		libx11-dev:arm64 \
+		libxext-dev:arm64 \
+		libxfixes-dev:arm64 \
+		libgl1-mesa-dev:arm64 \
+		libglu1-mesa-dev:arm64 \
+		make \
+		pkg-config \
+		python3 \
+		zlib1g-dev:arm64 \
+		libssl-dev:arm64 \
+	&& rm -rf /var/lib/apt/lists/*
