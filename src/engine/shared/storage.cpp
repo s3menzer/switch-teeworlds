@@ -109,6 +109,7 @@ public:
 	void LoadPaths()
 	{
 		// check current directory
+		dbg_msg("storage/access", "open read path='storage.cfg'");
 		IOHANDLE File = io_open("storage.cfg", IOFLAG_READ);
 		if(!File)
 		{
@@ -116,6 +117,7 @@ public:
 			char aBuffer[MAX_PATH_LENGTH];
 			str_copy(aBuffer, m_aAppDir, sizeof(aBuffer));
 			str_append(aBuffer, "/storage.cfg", sizeof(aBuffer));
+			dbg_msg("storage/access", "open read path='%s'", aBuffer);
 			File = io_open(aBuffer, IOFLAG_READ);
 			if(!File)
 			{
@@ -328,6 +330,7 @@ public:
 
 	virtual void ListDirectory(int Type, const char *pPath, FS_LISTDIR_CALLBACK pfnCallback, void *pUser)
 	{
+		dbg_msg("storage/access", "list type=%d path='%s'", Type, pPath);
 		char aBuffer[MAX_PATH_LENGTH];
 		if(Type == TYPE_ALL)
 		{
@@ -352,6 +355,9 @@ public:
 	// of one of the storage paths.
 	virtual IOHANDLE OpenFile(const char *pFilename, int Flags, int Type, char *pBuffer = 0, int BufferSize = 0, FCheckCallback pfnCheckCB = 0, const void *pCheckCBData = 0)
 	{
+		const char *pMode = Flags & IOFLAG_WRITE ? "write" : "read";
+		dbg_msg("storage/access", "open %s request type=%d file='%s'", pMode, Type, pFilename);
+
 		char aBuffer[MAX_PATH_LENGTH];
 		if(!pBuffer)
 		{
@@ -369,6 +375,7 @@ public:
 		// is safe.
 		if(str_check_pathname(pFilename) != 0)
 		{
+			dbg_msg("storage/access", "reject %s file='%s': invalid pathname", pMode, pFilename);
 			pBuffer[0] = 0;
 			return 0;
 		}
@@ -376,7 +383,11 @@ public:
 		// open file
 		if(Flags&IOFLAG_WRITE)
 		{
-			return io_open(GetPath(TYPE_SAVE, pFilename, pBuffer, BufferSize), Flags);
+			const char *pPath = GetPath(TYPE_SAVE, pFilename, pBuffer, BufferSize);
+			dbg_msg("storage/access", "open write path='%s'", pPath);
+			IOHANDLE Handle = io_open(pPath, Flags);
+			dbg_msg("storage/access", "open write result=%s path='%s'", Handle ? "success" : "failed", pPath);
+			return Handle;
 		}
 		else
 		{
@@ -393,21 +404,29 @@ public:
 
 			for(int i = LB; i < UB; ++i)
 			{
-				Handle = io_open(GetPath(i, pFilename, pBuffer, BufferSize), Flags);
+				const char *pPath = GetPath(i, pFilename, pBuffer, BufferSize);
+				dbg_msg("storage/access", "open read path='%s'", pPath);
+				Handle = io_open(pPath, Flags);
 				if(Handle)
 				{
 					// do an additional check on the file
 					if(pfnCheckCB && !pfnCheckCB(Handle, pCheckCBData))
 					{
+						dbg_msg("storage/access", "read check failed path='%s'", pPath);
 						io_close(Handle);
 						Handle = 0;
 					}
 					else
+					{
+						dbg_msg("storage/access", "open read result=success path='%s'", pPath);
 						return Handle;
+					}
 				}
+				dbg_msg("storage/access", "open read result=failed path='%s'", pPath);
 			}
 		}
 
+		dbg_msg("storage/access", "open %s result=failed file='%s'", pMode, pFilename);
 		pBuffer[0] = 0;
 		return 0;
 	}
@@ -530,7 +549,11 @@ public:
 			return false;
 
 		char aBuffer[MAX_PATH_LENGTH];
-		return !fs_remove(GetPath(Type, pFilename, aBuffer, sizeof(aBuffer)));
+		const char *pPath = GetPath(Type, pFilename, aBuffer, sizeof(aBuffer));
+		dbg_msg("storage/access", "remove path='%s'", pPath);
+		const bool Success = !fs_remove(pPath);
+		dbg_msg("storage/access", "remove result=%s path='%s'", Success ? "success" : "failed", pPath);
+		return Success;
 	}
 
 	virtual bool RenameFile(const char* pOldFilename, const char* pNewFilename, int Type)
@@ -539,7 +562,12 @@ public:
 			return false;
 		char aOldBuffer[MAX_PATH_LENGTH];
 		char aNewBuffer[MAX_PATH_LENGTH];
-		return !fs_rename(GetPath(Type, pOldFilename, aOldBuffer, sizeof(aOldBuffer)), GetPath(Type, pNewFilename, aNewBuffer, sizeof (aNewBuffer)));
+		const char *pOldPath = GetPath(Type, pOldFilename, aOldBuffer, sizeof(aOldBuffer));
+		const char *pNewPath = GetPath(Type, pNewFilename, aNewBuffer, sizeof(aNewBuffer));
+		dbg_msg("storage/access", "rename old='%s' new='%s'", pOldPath, pNewPath);
+		const bool Success = !fs_rename(pOldPath, pNewPath);
+		dbg_msg("storage/access", "rename result=%s old='%s' new='%s'", Success ? "success" : "failed", pOldPath, pNewPath);
+		return Success;
 	}
 
 	virtual bool CreateFolder(const char *pFoldername, int Type)
@@ -548,7 +576,11 @@ public:
 			return false;
 
 		char aBuffer[MAX_PATH_LENGTH];
-		return !fs_makedir(GetPath(Type, pFoldername, aBuffer, sizeof(aBuffer)));
+		const char *pPath = GetPath(Type, pFoldername, aBuffer, sizeof(aBuffer));
+		dbg_msg("storage/access", "mkdir path='%s'", pPath);
+		const bool Success = !fs_makedir(pPath);
+		dbg_msg("storage/access", "mkdir result=%s path='%s'", Success ? "success" : "failed", pPath);
+		return Success;
 	}
 
 	virtual void GetCompletePath(int Type, const char *pDir, char *pBuffer, unsigned BufferSize)
