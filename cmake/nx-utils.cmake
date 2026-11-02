@@ -203,14 +203,17 @@ function(add_nro_target target)
     # CMakeLists2.txt. The source-tree data/ directory only contains the
     # directory layout and is normally empty, so use the generated data
     # directory here. elf2nro stores its contents at the RomFS root.
-    set(__ROMFS_DIR "${PROJECT_BINARY_DIR}/data")
-    if(EXISTS "${__ROMFS_DIR}")
-        file(GLOB_RECURSE __ROMFS_FILES "${__ROMFS_DIR}/*")
-        list(APPEND __NRO_COMMAND "--romfsdir=${__ROMFS_DIR}")
-        list(LENGTH __ROMFS_FILES __ROMFS_FILE_COUNT)
-        message(STATUS
-                "Switch RomFS for ${target}: ${__ROMFS_DIR} "
-                "(${__ROMFS_FILE_COUNT} entries)")
+    set(__ROMFS_DIR "")
+    if(NOT "${ARGV1}" STREQUAL "NO_ROMFS")
+        set(__ROMFS_DIR "${PROJECT_BINARY_DIR}/data")
+        if(EXISTS "${__ROMFS_DIR}")
+            file(GLOB_RECURSE __ROMFS_FILES "${__ROMFS_DIR}/*")
+            list(APPEND __NRO_COMMAND "--romfsdir=${__ROMFS_DIR}")
+            list(LENGTH __ROMFS_FILES __ROMFS_FILE_COUNT)
+            message(STATUS
+                    "Switch RomFS for ${target}: ${__ROMFS_DIR} "
+                    "(${__ROMFS_FILE_COUNT} entries)")
+        endif()
     endif()
 
     if (NOT ${CMAKE_CURRENT_BINARY_DIR}/${target}.nacp)
@@ -269,7 +272,11 @@ function(build_switch_binaries target)
 
     # Build the binaries
     add_nso_target(${target_we})
-    add_nro_target(${target_we})
+    if(${ARGC} GREATER 1)
+        add_nro_target(${target_we} ${ARGV1})
+    else()
+        add_nro_target(${target_we})
+    endif()
 endfunction()
 
 function (build_switch_nsp target)
