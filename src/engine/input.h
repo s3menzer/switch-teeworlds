@@ -90,6 +90,12 @@ public:
 	virtual IJoystick *GetActiveJoystick() = 0;
 	virtual void SelectNextJoystick() = 0;
 
+#if defined(__SWITCH__)
+	virtual int SwitchMoveDirection() const { return 0; }
+	virtual void SwitchSetGameControls(bool) {}
+	virtual bool SwitchTouchPosition(float *, float *) const { return false; }
+#endif
+
 	// mouse
 	virtual void MouseModeRelative() = 0;
 	virtual void MouseModeAbsolute() = 0;

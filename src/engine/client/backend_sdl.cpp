@@ -3,6 +3,10 @@
 #include <base/detect.h>
 #include "SDL.h"
 #include "SDL_opengl.h"
+#if defined(__SWITCH__)
+	#include <switch/renderPatch.h>
+	#include <switch.h>
+#endif
 
 #include <base/tl/threading.h>
 
@@ -430,7 +434,9 @@ void CCommandProcessorFragment_OpenGL::Cmd_Texture_Create(const CCommandBuffer::
 			glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 			glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 			pTexData = pTmpData+i*(Width*Height*Depth*pCommand->m_PixelSize);
+			#if !defined(__SWITCH__)
 			glTexImage3D(GL_TEXTURE_3D, 0, StoreOglformat, Width, Height, Depth, 0, Oglformat, GL_UNSIGNED_BYTE, pTexData);
+			#endif
 
 			m_aTextures[pCommand->m_Slot].m_MemSize += Width*Height*pCommand->m_PixelSize;
 		}

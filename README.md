@@ -1,214 +1,242 @@
-<a href="https://repology.org/metapackage/teeworlds/versions">
-    <img src="https://repology.org/badge/vertical-allrepos/teeworlds.svg" alt="Packaging status" align="right">
-</a>
+# Teeworlds
 
-Teeworlds ![GitHub Actions](https://github.com/teeworlds/teeworlds/workflows/Build/badge.svg)
-=========
+This repository contains the Teeworlds Nintendo Switch port and the
+supporting build scripts.
 
-A retro multiplayer shooter
----------------------------
+## Get the source
 
-Teeworlds is a free online multiplayer game, available for all major
-operating systems. Battle with up to 16 players in a variety of game
-modes, including Team Deathmatch and Capture The Flag. You can even
-design your own maps!
+```bash
+git clone --recurse-submodules git@github.com:s3menzer/switch-teeworlds.git
+cd switch-teeworlds
 
-This software is provided 'as-is', without any express or implied
-warranty. In no event will the authors be held liable for any damages
-arising from the use of this software. See license.txt for full license
-text including copyright information.
+# For an existing checkout:
+git submodule sync --recursive
+git submodule update --init --recursive
+```
 
-Please visit https://www.teeworlds.com/ for up-to-date information about
-the game, including new versions, custom maps and much more.
+## Build overview
+
+| Target          | Native build             | Docker build                |
+| --------------- | ------------------------ | --------------------------- |
+| Linux           | `./build-linux.sh`       | `./docker-build-linux.sh`   |
+| AArch64 server  | `./build-aarch64.sh`     | `./docker-build-aarch64.sh` |
+| Windows         | MSYS2 instructions below | `./docker-build-windows.sh` |
+| Nintendo Switch | —                        | `./docker-build-switch.sh`  |
+
+All scripts use `Release` builds by default. Set `BUILD_TYPE`, `BUILD_DIR`,
+`JOBS`, or `CLIENT` to customize a build.
+
+## Linux
+
+### Native Linux build
+
+Install the dependencies:
+
+```bash
+sudo apt install \
+  build-essential cmake git python3 pkg-config \
+  libfreetype6-dev libsdl2-dev libssl-dev \
+  libgl1-mesa-dev libx11-dev libxext-dev libxfixes-dev zlib1g-dev
+```
+
+Build the client and server:
+
+```bash
+./build-linux.sh
+```
+
+The output is placed in `build-linux/`.
+
+Useful commands:
+
+```bash
+./build-linux.sh clean
+CLIENT=OFF ./build-linux.sh       # server only
+BUILD_TYPE=Debug ./build-linux.sh
+```
+
+Run the result:
+
+```bash
+cd build-linux
+./teeworlds
+./teeworlds_srv
+```
+
+### Linux Docker build
+
+Docker or Podman is required. The script builds `Dockerfile.linux`
+automatically when the image is missing:
+
+```bash
+./docker-build-linux.sh
+```
+
+The result is written to `build-linux/` on the host.
+
+## AArch64 server
+
+### Native AArch64 build
+
+Use this on a 64-bit Raspberry Pi or another AArch64 Linux system:
+
+```bash
+./build-aarch64.sh
+```
+
+This builds the server only and writes it to:
+
+```text
+build-aarch64/teeworlds_srv
+```
+
+Run it from the build directory so the bundled data is found:
+
+```bash
+cd build-aarch64
+./teeworlds_srv
+```
+
+### AArch64 Docker build
+
+Use this on an x86-64 host to cross-compile the Raspberry Pi server:
+
+```bash
+./docker-build-aarch64.sh
+```
+
+The image is built from `Dockerfile.aarch64` if necessary. The generated
+binary is `build-aarch64/teeworlds_srv`.
+
+If Podman reports a user/group or `setgroups` error, try:
+
+```bash
+CONTAINER_USE_HOST_USER=0 ./docker-build-aarch64.sh
+```
+
+## Windows with MSYS2
+
+Install MSYS2, then open the **MSYS2 MinGW 64-bit** shell and install:
+
+```bash
+pacman -Syu
+pacman -S --needed \
+  git python mingw-w64-x86_64-toolchain \
+  mingw-w64-x86_64-cmake mingw-w64-x86_64-ninja \
+  mingw-w64-x86_64-freetype mingw-w64-x86_64-SDL2 \
+  mingw-w64-x86_64-zlib
+```
+
+Configure and build:
+
+```bash
+cmake -S . -B build-windows-msys2 -G Ninja \
+  -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/mingw64.toolchain \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DDOWNLOAD_DEPENDENCIES=OFF \
+  -DDOWNLOAD_GTEST=OFF \
+  -DPREFER_BUNDLED_LIBS=OFF
+
+cmake --build build-windows-msys2 --parallel
+```
+
+The executable is generated in `build-windows-msys2/`.
+
+### Windows Docker cross-build
+
+On a Linux host, the same MinGW build used by CI can be run with:
+
+```bash
+./docker-build-windows.sh
+```
+
+The script builds `Dockerfile.windows` automatically when its image is
+missing and writes the release package to `build-windows/`.
+
+## Nintendo Switch
+
+The Switch build uses the devkitPro Docker image:
+
+```bash
+./docker-build-switch.sh
+```
+
+The image is not pulled by default. To pull it:
+
+```bash
+IMAGE_PULL=1 ./docker-build-switch.sh
+```
+
+To avoid incrementing the Switch build number:
+
+```bash
+AUTO_BUILD_NUMBER=0 ./docker-build-switch.sh
+```
+
+The build creates:
+
+```text
+build-switch/teeworlds.nro  # updater/launcher started by hbmenu
+build-switch/game.nro       # actual game
+manifests.json              # updater manifest
+```
+
+Static game data is embedded into both NROs through RomFS. No external
+`data/` directory is needed on the SD card.
+
+The SD card layout is:
+
+```text
+/switch/teeworlds/teeworlds.nro
+/switch/teeworlds/game.nro
+/switch/teeworlds/settings07.cfg
+```
+
+The launcher downloads `manifests.json`, updates files in place, and
+chain-loads `game.nro`. The launcher itself can only be replaced on the next
+invocation because it is currently running.
+
+### Upload to the update server
+
+Configure the rsync destination if required:
+
+```bash
+export RSYNC_TARGET=pi:/var/www/html/switch/teeworlds
+./rsync-upload.sh
+```
+
+The script uploads both NROs, `settings07.cfg`, and `manifests.json`.
+
+### Launch through nxlink
+
+Close the running game, then run:
+
+```bash
+./deploy-switch-docker.sh 192.168.22.202
+```
+
+The default target on the Switch is `teeworlds/teeworlds.nro`. Nxlink output
+is saved to `teeworlds-nxlink.log`.
+
+For diagnostics, set this in `settings07.cfg`:
+
+```text
+debug 1
+```
+
+The application log is written to `teeworlds.txt` next to the launched NRO.
+
+## Runtime configuration
+
+The default Switch server address is:
+
+```text
+192.168.22.7:8303
+```
+
+## License
+
+This software is provided “as-is”, without any express or implied warranty.
+See `license.txt` for the complete license text.
 
 Originally written by Magnus Auvinen.
-
----
-
-Teeworlds supports two build systems: CMake and bam.
-
-Building on Linux or macOS (CMake)
-==========================
-
-Installing dependencies
------------------------
-
-    # Debian/Ubuntu
-    sudo apt install build-essential cmake git libfreetype6-dev libsdl2-dev libpnglite-dev libwavpack-dev python3
-    
-    # Fedora
-    sudo dnf install @development-tools cmake gcc-c++ git freetype-devel pnglite-devel python3 SDL2-devel wavpack-devel
-    
-    # Arch Linux (doesn't have pnglite in its repositories)
-    sudo pacman -S --needed base-devel cmake freetype2 git python sdl2 wavpack
-    
-    # macOS
-    brew install cmake freetype sdl2
-
-
-Downloading repository
-----------------------
-
-    git clone https://github.com/teeworlds/teeworlds --recurse-submodules
-    cd teeworlds
-    
-    # If you already cloned the repository before, use:
-    # git submodule update --init
-
-
-Building
---------
-
-    mkdir -p build
-    cd build
-    cmake ..
-    make
-
-On subsequent builds, you only have to repeat the `make` step.
-
-You can then run the client with `./teeworlds` and the server with
-`./teeworlds_srv`.
-
-
-Build options
--------------
-
-The following options can be passed to the `cmake ..` command line (between the
-`cmake` and `..`) in the "Building" step above.
-
-`-GNinja`: Use the Ninja build system instead of Make. This automatically
-parallelizes the build and is generally **faster**. (Needs `sudo apt install
-ninja-build` on Debian, `sudo dnf install ninja-build` on Fedora, and `sudo
-pacman -S --needed ninja` on Arch Linux.)
-
-`-DDEV=ON`: Enable debug mode and disable some release mechanics. This leads to
-**faster** builds.
-
-`-DCLIENT=OFF`: Disable generation of the client target. Can be useful on
-headless servers which don't have graphics libraries like SDL2 installed.
-
-Building on Linux or macOS (bam)
-==========================
-
-Installing dependencies
------------------------
-
-    # Debian/Ubuntu 19.10+
-    sudo apt install bam git libfreetype6-dev libsdl2-dev libpnglite-dev libwavpack-dev python3
-    
-    # Fedora
-    sudo dnf install bam gcc-c++ git freetype-devel pnglite-devel python3 SDL2-devel wavpack-devel
-    
-    # Arch Linux (doesn't have pnglite in its repositories)
-    sudo pacman -S --needed base-devel bam freetype2 git python sdl2 wavpack
-    
-    # macOS
-    brew install bam freetype sdl2
-    
-    # other (add bam to your path)
-    git clone https://github.com/teeworlds/bam
-    cd bam
-    ./make_unix.sh
-
-
-Downloading repository
-----------------------
-
-    git clone https://github.com/teeworlds/teeworlds --recurse-submodules
-    cd teeworlds
-    
-    # If you already cloned the repository before, use:
-    # git submodule update --init
-
-
-Building
---------
-
-    bam
-
-The compiled game is located in a sub-folder of `build`. You can run the client from there with `./teeworlds` and the server with `./teeworlds_srv`.
-
-
-Build options
--------------
-
-One of the following targets can be added to the `bam` command line: `game` (default), `server`, `client`, `content`, `masterserver`, `tools`.
-
-The following options can also be added.
-
-`conf=release` to build in release mode (defaults to `conf=debug`).
-
-`arch=x86` or `arch=x86_64` to force select an architecture.
-
-Building on Windows with Visual Studio & CMake
-======================
-
-Download and install some version of [Microsoft Visual
-Studio](https://www.visualstudio.com/) (as of writing, MSVS Community 2019)
-with the following components:
-
-* Desktop development with C++ (on the main page)
-* Python development (on the main page)
-* Git for Windows (in Individual Components → Code tools)
-
-Run Visual Studio. Open the Team Explorer (View → Team Explorer, Ctrl+^,
-Ctrl+M). Click Clone (in the Team Explorer, Connect → Local Git Repositories).
-Enter `https://github.com/teeworlds/teeworlds` into the first input box. Wait
-for the download to complete (terminals might pop up).
-
-Wait until the CMake configuration is done (watch the Output windows at the
-bottom).
-
-Select `teeworlds.exe` in the Select Startup Item… combobox next to the green
-arrow. Wait for the compilation to finish.
-
-For subsequent builds you only have to click the button with the green arrow
-again.
-
-Building on Windows with MSVC build tools & bam
-======================
-
-Download and install [Microsoft C++ Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) and [Python](https://www.python.org/downloads/).
-
-Download and unzip [Teeworlds stable sources](https://github.com/teeworlds/teeworlds/releases) or [Teeworlds latest sources](https://github.com/teeworlds/teeworlds/archive/master.zip).
-
-Download and unzip [bam](https://github.com/matricks/bam/archive/v0.5.1.tar.gz) to `teeworlds-version\bam`.
-
-Run the `x64 Native Tools Command Prompt` (or `x86` for 32-bit) from the start menu.
-
-    # Navigate to the Teeworlds source directory
-    cd ...\teeworlds-version
-    
-    # Build bam (use make_win32_msvc.bat for 32-bit)
-    cd bam
-    make_win64_msvc.bat
-    copy bam ..
-    cd ..
-    
-    # Build Teeworlds
-    bam conf=release
-
-Use `conf=debug` to build the debug version instead. You can also provide a target after the `bam` command : `game` (default), `server`, `client`, `content`, `masterserver`, `tools`.
-
-Building on Windows with MinGW & CMake
-======================
-
-Download and install MinGW with at least the following components:
-
-- mingw-developer-toolkit-bin
-- mingw32-base-bin
-- mingw32-gcc-g++-bin
-- msys-base-bin
-
-Also install [Git](https://git-scm.com/downloads) (for downloading the source
-code), [Python](https://www.python.org/downloads/) and
-[CMake](https://cmake.org/download/).
-
-Open CMake ("CMake (cmake-gui)" in the start menu). Click "Browse Source"
-(first line) and select the directory with the Teeworlds source code. Next,
-click "Browse Build" and create a subdirectory for the build (e.g. called
-"build"). Then click "Configure". Select "MinGW Makefiles" as the generator and
-click "Finish". Wait a bit (until the progress bar is full). Then click
-"Generate".
-
-You can now build Teeworlds by executing `mingw32-make` in the build directory.

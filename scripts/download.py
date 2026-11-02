@@ -31,9 +31,9 @@ def downloadAll(targets):
 	libs_dir = "teeworlds-libs-{}".format(version)
 
 	if "sdl" in targets:
-		copy_tree(libs_dir + "/sdl/", "other/sdl/")
+		shutil.copytree(libs_dir + "/sdl/", "other/sdl/", dirs_exist_ok=True)
 	if "freetype" in targets:
-		copy_tree(libs_dir + "/freetype/", "other/freetype/")
+		shutil.copytree(libs_dir + "/freetype/", "other/freetype/", dirs_exist_ok=True)
 
 	# cleanup
 	try:

@@ -153,6 +153,11 @@ int CControls::SnapInput(int *pData)
 			m_InputData.m_Direction = -1;
 		if(!m_InputDirectionLeft && m_InputDirectionRight)
 			m_InputData.m_Direction = 1;
+#if defined(__SWITCH__)
+		const int SwitchMoveDirection = Input()->SwitchMoveDirection();
+		if(SwitchMoveDirection != 0)
+			m_InputData.m_Direction = SwitchMoveDirection;
+#endif
 
 		// stress testing
 #ifdef CONF_DEBUG

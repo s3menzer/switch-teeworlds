@@ -8,6 +8,10 @@
 	to compile for.
 */
 
+#if defined(__SWITCH__)
+	#include <switch/detectPatch.h>
+#endif
+
 /* platforms */
 
 /* windows Family */
@@ -82,9 +86,8 @@
 	#define CONF_PLATFORM_STRING "beos"
 #endif
 
-
 /* use gcc endianness definitions when available */
-#if defined(__GNUC__) && !defined(__APPLE__) && !defined(__MINGW32__) && !defined(__sun)
+#if defined(__GNUC__) && !defined(__APPLE__) && !defined(__MINGW32__) && !defined(__sun) && !defined(__SWITCH__)
 	#if defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__)
 		#include <sys/endian.h>
 	#else
@@ -97,6 +100,7 @@
 		#define CONF_ARCH_ENDIAN_BIG 1
 	#endif
 #endif
+
 
 
 /* architectures */

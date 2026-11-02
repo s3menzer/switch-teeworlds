@@ -1,0 +1,21 @@
+FROM debian:bookworm-slim
+
+RUN apt-get update \
+	&& apt-get install --no-install-recommends -y \
+		build-essential \
+		ca-certificates \
+		cmake \
+		git \
+		libfreetype6-dev \
+		libsdl2-dev \
+		libssl-dev \
+		libx11-dev \
+		libxext-dev \
+		libxfixes-dev \
+		libgl1-mesa-dev \
+		libglu1-mesa-dev \
+		make \
+		pkg-config \
+		python3 \
+		zlib1g-dev \
+	&& rm -rf /var/lib/apt/lists/*

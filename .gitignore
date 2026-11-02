@@ -1,6 +1,9 @@
 /.bam
 /bam
 /build
+/build-switch
+/build-windows
+/thirdParty
 /config.lua
 /objs
 /other/*/include
@@ -14,9 +17,11 @@ __pycache__/
 *.pyc
 *.pyo
 scripts/work/
+/thirdParty
 /SDL.dll
 /freetype.dll
 /autoexec.cfg
+/config.cfg
 other/freetype
 other/sdl
 Info.plist
@@ -31,6 +36,8 @@ teeworlds*
 !other/bash-completion/teeworlds
 !teeworlds.manifest
 !teeworlds.rc
+teeworlds.xml
+manifests.json
 teeworlds_srv*
 !other/bash-completion/teeworlds_srv
 testrunner
